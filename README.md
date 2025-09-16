@@ -1,43 +1,52 @@
-# Fall Detection and Alert System
+# Fall Detection and Alert System  
 
-##  Project Overview
+## Project Overview  
 This project uses a **YOLO-based computer vision model** to detect falls from video input and trigger alerts if a person remains on the ground for more than **5 seconds**.  
-It is implemented with a **Streamlit app** where users can upload videos and get annotated results.
+It is implemented with a **Streamlit app**, where users can upload videos and get annotated results with alerts.  
 
 ---
 
-##  What It Does
+## What It Does  
 - Detects human activities: **Walking, Sitting, Fall Detected**  
 - Starts a **timer when a fall is detected**  
-- If the person recovers before 5 seconds → no alert  
-- If the person stays down **≥ 5 seconds** → **alert is triggered**  
+- If the person recovers **before 5 seconds** → no alert  
+- If the person stays down **≥ 5 seconds** → alert is triggered  
 - Outputs a processed video with **colored bounding boxes**:  
-  - Green → Walking / Sitting  
-  - Yellow → Fall detected, countdown running  
-  - Red → Fall alert triggered  
+  - **Green** → Walking / Sitting  
+  - **Yellow** → Fall detected, countdown running  
+  - **Red** → Fall alert triggered  
 
 ---
 
-## Who It Helps
-- **Elderly people living alone**  
-- **Patients in hospitals**  
-- **Caregivers** who need real-time awareness of dangerous falls  
-- **Underserved communities** without access to expensive fall-detection hardware  
+## Who It Helps  
+- **Elderly people living alone** → vulnerable to serious injury from falls  
+- **Patients in hospitals or care centers** → need timely detection for quick response  
+- **Industrial and construction workers** → at risk of accidents, slips, or sudden medical events (e.g., heart attacks, strokes)  
+- **Caregivers and healthcare staff** → gain real-time awareness of dangerous falls, reducing response time  
+- **Communities without access to expensive fall-detection hardware** → affordable AI alternative makes safety more inclusive  
 
 ---
 
-##  Why It Matters
-Falls are one of the **leading causes of injury among elderly populations**, especially those living independently.  
-Early detection can **save lives** by ensuring help arrives quickly.  
+## Why It Matters  
+Falls are one of the **leading causes of injury among elderly populations**, but they also affect workers and people with medical conditions.  
+Early detection can save lives by ensuring help arrives quickly.  
 
-- WHO reports that **37.3 million falls** annually are severe enough to require medical attention.  
-- Rapid alerts reduce risk of long-term complications.  
+- WHO reports that **37.3 million falls annually** are severe enough to require medical attention.  
+- Workplace injuries and sudden collapses (heart attack, stroke) often go unnoticed without monitoring.  
+- Rapid alerts reduce response time, improving recovery outcomes and survival rates.  
+
+---
+
+## Measurable Impact  
+- **Accuracy**: The YOLO model was trained on activity datasets (Walking, Sitting, Falling).  
+- **Threshold**: Falls lasting more than **5 seconds** are flagged, but this can be customized depending on the use case.  
+- **Practical demo**: The Streamlit app allows users to upload a video and download an annotated version with fall alerts clearly marked.  
 
 ---
 
-## 📊 Measurable Impact
-- **Accuracy**: Our YOLO model was trained on activity datasets (Walking, Sitting, Falling).  
-- **Impact metric**: If a fall lasts **> 5 seconds**, it is detected and flagged.  
-- **Practical demo**: Uploaded video is annotated and downloadable with fall alerts marked.  
+## Tech Stack  
+- Python  
+- OpenCV  
+- YOLO12 (Ultralytics)  
+- Streamlit  
 
----
