@@ -4,6 +4,8 @@
 This project uses a **YOLO-based computer vision model** to detect falls from video input and trigger alerts if a person remains on the ground for more than **5 seconds**.  
 It is implemented with a **Streamlit app**, where users can upload videos and get annotated results with alerts.  
 
+Here is the link for the live demo: [Live Demo](https://safe-fall-detection.streamlit.app/)  
+
 ---
 
 ## What It Does  
