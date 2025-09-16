@@ -1,7 +1,7 @@
 # Fall Detection and Alert System  
 
 ## Project Overview  
-This project uses a **YOLO-based computer vision model** to detect falls from video input and trigger alerts if a person remains on the ground for more than **5 seconds**.  
+This project uses a **YOLO-based computer vision model** to detect falls from video input and trigger alerts if a person remains on the ground for more than **10 seconds**.  
 It is implemented with a **Streamlit app**, where users can upload videos and get annotated results with alerts.  
 
 Here is the link for the live demo: [Live Demo](https://safe-fall-detection.streamlit.app/)  
@@ -11,8 +11,8 @@ Here is the link for the live demo: [Live Demo](https://safe-fall-detection.stre
 ## What It Does  
 - Detects human activities: **Walking, Sitting, Fall Detected**  
 - Starts a **timer when a fall is detected**  
-- If the person recovers **before 5 seconds** → no alert  
-- If the person stays down **≥ 5 seconds** → alert is triggered  
+- If the person recovers **before 10 seconds** → no alert  
+- If the person stays down **≥ 10 seconds** → alert is triggered  
 - Outputs a processed video with **colored bounding boxes**:  
   - **Green** → Walking / Sitting  
   - **Yellow** → Fall detected, countdown running  
@@ -41,7 +41,7 @@ Early detection can save lives by ensuring help arrives quickly.
 
 ## Measurable Impact  
 - **Accuracy**: The YOLO model was trained on activity datasets (Walking, Sitting, Falling).  
-- **Threshold**: Falls lasting more than **5 seconds** are flagged, but this can be customized depending on the use case.  
+- **Threshold**: Falls lasting more than **10 seconds** are flagged, but this can be customized depending on the use case.  
 - **Practical demo**: The Streamlit app allows users to upload a video and download an annotated version with fall alerts clearly marked.  
 
 ---
