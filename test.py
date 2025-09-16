@@ -52,7 +52,7 @@ while True:
                             (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                             1, (0, 0, 255), 2)
             else:
-                remaining = int(10 - elapsed)
+                remaining = int(5- elapsed)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
                 cv2.putText(frame, f"Fall detected, alert in {remaining}s",
                             (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
@@ -69,4 +69,5 @@ while True:
 
 cap.release()
 out.release()
+
 
