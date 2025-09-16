@@ -26,12 +26,12 @@ def detect_action(frame, model):
             return cls_id, conf, x1, y1, x2, y2
     return None, None, None, None, None, None
 
-def process_video(input_path, model_path, output_path, progress_bar, status_text):
+def process_video(input_path, output_path, progress_bar, status_text):
     """Process video with fall detection"""
     try:
         # Load model
         status_text.text("Loading YOLO model...")
-        model = YOLO(model_path)
+        model = YOLO("best.pt")
         classes = ["Fall Detected", "Walking", "Sitting"]
         
         # Open video
@@ -108,33 +108,22 @@ def process_video(input_path, model_path, output_path, progress_bar, status_text
 
 def main():
     st.title("Fall Detection Video Processor")
-    st.write("Upload a video file and YOLO model to detect falls and generate alerts.")
+    st.write("Upload a video file to detect falls and generate alerts.")
     
-    # File upload sections
-    col1, col2 = st.columns(2)
+    # File upload section
+    st.subheader("Upload Video File")
+    video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
     
-    with col1:
-        st.subheader("Upload Video File")
-        video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
-    
-    with col2:
-        st.subheader("Upload YOLO Model")
-        model_file = st.file_uploader("Choose YOLO model file (.pt)", type=['pt'])
-    
-    if video_file is not None and model_file is not None:
-        # Create temporary files
+    if video_file is not None:
+        # Create temporary file for video
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
             tmp_video.write(video_file.read())
             video_path = tmp_video.name
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pt') as tmp_model:
-            tmp_model.write(model_file.read())
-            model_path = tmp_model.name
-        
         # Output file path
         output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
         
-        st.write("Files uploaded successfully!")
+        st.write("Video uploaded successfully!")
         
         # Process button
         if st.button("Process Video"):
@@ -143,7 +132,7 @@ def main():
             status_text = st.empty()
             
             # Process video
-            success = process_video(video_path, model_path, output_path, progress_bar, status_text)
+            success = process_video(video_path, output_path, progress_bar, status_text)
             
             if success:
                 st.success("Video processing completed!")
@@ -154,29 +143,23 @@ def main():
                 download_link = get_download_link(output_path, download_filename)
                 st.markdown(download_link, unsafe_allow_html=True)
             else:
-                st.error("Video processing failed. Please check your files and try again.")
+                st.error("Video processing failed. Please check your file and try again.")
         
         # Cleanup temporary files on app restart
         try:
             os.unlink(video_path)
-            os.unlink(model_path)
         except:
             pass
     
-    elif video_file is None and model_file is None:
-        st.info("Please upload both a video file and a YOLO model file to begin processing.")
-    elif video_file is None:
-        st.warning("Please upload a video file.")
     else:
-        st.warning("Please upload a YOLO model file (.pt).")
+        st.info("Please upload a video file to begin processing.")
     
     # Instructions
     st.markdown("---")
     st.subheader("Instructions")
     st.write("1. Upload your video file (supported formats: MP4, AVI, MOV, MKV)")
-    st.write("2. Upload your trained YOLO model file (.pt format)")
-    st.write("3. Click 'Process Video' to start fall detection")
-    st.write("4. Download the processed video with fall detection annotations")
+    st.write("2. Click 'Process Video' to start fall detection")
+    st.write("3. Download the processed video with fall detection annotations")
     
     st.markdown("---")
     st.subheader("Fall Detection Logic")
@@ -185,6 +168,4 @@ def main():
     st.write("- Red box: Fall alert triggered (person down for 10+ seconds)")
 
 if __name__ == "__main__":
-
     main()
-
