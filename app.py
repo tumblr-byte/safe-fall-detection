@@ -75,13 +75,13 @@ def process_video(input_path, model_path, output_path, progress_bar, status_text
                     fall_start_time = time.time()
                 else:
                     elapsed = time.time() - fall_start_time
-                    if elapsed >= 10:  # 10 seconds threshold
+                    if elapsed >= 5:  # 5 seconds threshold
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                        cv2.putText(frame, "ALERT! Fall detected for 10s",
+                        cv2.putText(frame, "ALERT! Fall detected for 5s",
                                     (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                     1, (0, 0, 255), 2)
                     else:
-                        remaining = int(10 - elapsed)
+                        remaining = int(5 - elapsed)
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
                         cv2.putText(frame, f"Fall detected, alert in {remaining}s",
                                     (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
@@ -185,4 +185,5 @@ def main():
     st.write("- Red box: Fall alert triggered (person down for 10+ seconds)")
 
 if __name__ == "__main__":
+
     main()
