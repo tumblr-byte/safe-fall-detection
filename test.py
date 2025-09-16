@@ -46,7 +46,7 @@ while True:
             fall_start_time = time.time()
         else:
             elapsed = time.time() - fall_start_time
-            if elapsed >= 5:  # 10 seconds threshold
+            if elapsed >= 5:  # 5 seconds threshold
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                 cv2.putText(frame, "ALERT! Fall detected for 5s",
                             (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
@@ -69,3 +69,4 @@ while True:
 
 cap.release()
 out.release()
+
