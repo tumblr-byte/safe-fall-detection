@@ -1,5 +1,7 @@
+opencv-python-headless>=4.8.1.78,<5.0
 streamlit
 ultralytics
 torch
 torchvision
-opencv-python-headless>=4.8.1.78,<5.0
+
+
