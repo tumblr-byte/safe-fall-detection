@@ -31,7 +31,7 @@ def detect_action(frame, model):
 def process_video(input_path, output_path, progress_bar, status_text):
     """Process video with fall detection"""
     try:
-        # Load model
+        # Load model once
         status_text.text("Loading YOLO model...")
         model = YOLO("best.pt")
         classes = ["Fall Detected", "Walking", "Sitting"]
@@ -46,12 +46,20 @@ def process_video(input_path, output_path, progress_bar, status_text):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        # Setup video writer
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # Reduce frame size for faster processing (optional)
+        # new_width = min(640, width)
+        # new_height = int((new_width / width) * height)
+        
+        # Setup video writer with better codec
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Changed from mp4v to XVID for better performance
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
         fall_start_time = None
+        fall_frame_count = 0
         frame_count = 0
+        
+        # Process every nth frame for speed (process every 2nd frame)
+        skip_frames = 2
         
         status_text.text("Processing video frames...")
         
@@ -61,9 +69,18 @@ def process_video(input_path, output_path, progress_bar, status_text):
                 break
             
             frame_count += 1
-            progress = frame_count / total_frames
-            progress_bar.progress(progress)
             
+            # Update progress more efficiently
+            if frame_count % 10 == 0:  # Update progress every 10 frames
+                progress = frame_count / total_frames
+                progress_bar.progress(progress)
+            
+            # Skip frames for faster processing
+            if frame_count % skip_frames != 0:
+                out.write(frame)
+                continue
+            
+            # Run detection
             cls_id, conf, x1, y1, x2, y2 = detect_action(frame, model)
             
             if cls_id is None:
@@ -74,27 +91,31 @@ def process_video(input_path, output_path, progress_bar, status_text):
             
             if label == "Fall Detected":
                 if fall_start_time is None:
-                    fall_start_time = time.time()
+                    fall_start_time = frame_count / fps  # Use frame-based timing
+                    fall_frame_count = 0
                 else:
-                    elapsed = time.time() - fall_start_time
-                    if elapsed >= 10:  # 10 seconds threshold
+                    fall_frame_count += skip_frames
+                    elapsed_seconds = fall_frame_count / fps
+                    
+                    if elapsed_seconds >= 10:  # 10 seconds threshold
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                         cv2.putText(frame, "ALERT! Fall detected for 10s",
                                     (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                     1, (0, 0, 255), 2)
                     else:
-                        remaining = int(10 - elapsed)
+                        remaining = int(10 - elapsed_seconds)
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
                         cv2.putText(frame, f"Fall detected, alert in {remaining}s",
                                     (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                     1, (0, 255, 255), 2)
             else:
                 fall_start_time = None
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 123, 3), 3)
+                fall_frame_count = 0
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)  # Changed color
                 cv2.putText(frame, label,
-                            (x1 - 10, y1),
-                            cv2.FONT_HERSHEY_COMPLEX,
-                            1, (0, 255, 0), 2)
+                            (x1, y1 - 10),  # Adjusted position
+                            cv2.FONT_HERSHEY_SIMPLEX,  # Changed font
+                            0.7, (0, 255, 0), 2)  # Smaller font size
             
             out.write(frame)
         
