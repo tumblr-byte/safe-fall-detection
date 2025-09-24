@@ -179,79 +179,131 @@ def main():
                 st.session_state.processing_complete = False
                 st.session_state.processed_video_path = None
                 st.session_state.processed_video_name = None
+                st.rerun()
         else:
             st.error("Processed video file not found. Please process the video again.")
             st.session_state.processing_complete = False
     
-    # File upload section
-    st.subheader("📤 Upload Video File")
-    video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
-    
-    if video_file is not None:
-        # Create temporary file for video
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
-            tmp_video.write(video_file.read())
-            video_path = tmp_video.name
+    # File upload section - ONLY show if not processing complete
+    if not st.session_state.processing_complete:
+        st.subheader("📤 Upload Video File")
+        video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
         
-        st.write("✅ Video uploaded successfully!")
-        
-        # Process button
-        if st.button("🚀 Process Video"):
-            # Create output file path with better naming
-            output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
-            output_path = os.path.join(tempfile.gettempdir(), output_filename)
+        if video_file is not None:
+            # IMPORTANT: Reset processing state when new video is uploaded
+            if st.session_state.processing_complete:
+                # Clean up old file
+                try:
+                    if st.session_state.processed_video_path:
+                        os.unlink(st.session_state.processed_video_path)
+                except:
+                    pass
+                # Reset state
+                st.session_state.processing_complete = False
+                st.session_state.processed_video_path = None
+                st.session_state.processed_video_name = None
             
-            # Progress indicators
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # Create temporary file for video
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
+                tmp_video.write(video_file.read())
+                video_path = tmp_video.name
             
-            # Show processing info
-            with st.spinner('Processing video... Please wait...'):
-                # Process video
-                success = process_video(video_path, output_path, progress_bar, status_text)
+            st.write("✅ Video uploaded successfully!")
             
-            # IMMEDIATELY update session state and show download
-            if success:
-                # Store in session state
-                st.session_state.processed_video_path = output_path
-                st.session_state.processed_video_name = output_filename
-                st.session_state.processing_complete = True
+            # Process button
+            if st.button("🚀 Process Video"):
+                # Create output file path with better naming
+                output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
+                output_path = os.path.join(tempfile.gettempdir(), output_filename)
                 
-                # Force immediate UI update
-                progress_bar.progress(1.0)
-                status_text.success("🎉 Processing completed!")
+                # Progress indicators
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 
-                # Show download section immediately
-                st.success("✅ Video processing completed!")
-                st.markdown("### 📥 Download Your Processed Video")
+                # Show processing info
+                with st.spinner('Processing video... Please wait...'):
+                    # Process video
+                    success = process_video(video_path, output_path, progress_bar, status_text)
                 
-                # Immediate download button
-                if os.path.exists(output_path):
-                    with open(output_path, 'rb') as file:
-                        st.download_button(
-                            label="📥 Download Processed Video",
-                            data=file.read(),
-                            file_name=output_filename,
-                            mime="video/avi",
-                            key="immediate_download"
-                        )
+                # IMMEDIATELY update session state and show download
+                if success:
+                    # Store in session state
+                    st.session_state.processed_video_path = output_path
+                    st.session_state.processed_video_name = output_filename
+                    st.session_state.processing_complete = True
+                    
+                    # Force immediate UI update
+                    progress_bar.progress(1.0)
+                    status_text.success("🎉 Processing completed!")
+                    
                     st.balloons()  # Celebration effect!
                     
                     # Force page refresh to show download at top
                     st.rerun()
                 else:
-                    st.error("Error: Processed video file not found.")
-            else:
-                st.error("❌ Video processing failed. Please check your file and try again.")
+                    st.error("❌ Video processing failed. Please check your file and try again.")
+            
+            # Cleanup temporary upload file
+            try:
+                os.unlink(video_path)
+            except:
+                pass
         
-        # Cleanup temporary upload file
-        try:
-            os.unlink(video_path)
-        except:
-            pass
+        else:
+            st.info("📤 Please upload a video file to begin processing.")
+                output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
+                output_path = os.path.join(tempfile.gettempdir(), output_filename)
+                
+                # Progress indicators
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # Show processing info
+                with st.spinner('Processing video... Please wait...'):
+                    # Process video
+                    success = process_video(video_path, output_path, progress_bar, status_text)
+                
+                # IMMEDIATELY update session state and show download
+                if success:
+                    # Store in session state
+                    st.session_state.processed_video_path = output_path
+                    st.session_state.processed_video_name = output_filename
+                    st.session_state.processing_complete = True
+                    
+                    # Force immediate UI update
+                    progress_bar.progress(1.0)
+                    status_text.success("🎉 Processing completed!")
+                    
+                    st.balloons()  # Celebration effect!
+                    
+                    # Force page refresh to show download at top
+                    st.rerun()
+                else:
+                    st.error("❌ Video processing failed. Please check your file and try again.")
+            
+            # Cleanup temporary upload file
+            try:
+                os.unlink(video_path)
+            except:
+                pass
+        
+        else:
+            st.info("📤 Please upload a video file to begin processing.")
     
     else:
-        st.info("📤 Please upload a video file to begin processing.")
+        # Show message that processing is complete and user can download above
+        st.info("🎉 Your video has been processed! Use the download button above.")
+        
+        # Only show the reset button here
+        if st.button("🔄 Process Another Video", key="main_reset"):
+            try:
+                os.unlink(st.session_state.processed_video_path)
+            except:
+                pass
+            st.session_state.processing_complete = False
+            st.session_state.processed_video_path = None
+            st.session_state.processed_video_name = None
+            st.rerun()
     
     # Instructions
     with st.expander("📋 Instructions", expanded=False):
