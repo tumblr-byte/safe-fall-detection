@@ -52,6 +52,7 @@ Early detection can save lives by ensuring help arrives quickly.
 - YOLO12 (Ultralytics)  
 - Streamlit  
 
+---
 
 ## Future Scope
 
