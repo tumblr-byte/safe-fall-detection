@@ -1,7 +1,6 @@
 import os
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
 
-
 import streamlit as st
 import cv2
 import tempfile
@@ -10,13 +9,24 @@ from ultralytics import YOLO
 import time
 import base64
 
+# Initialize session state
+if 'processed_video_path' not in st.session_state:
+    st.session_state.processed_video_path = None
+if 'processed_video_name' not in st.session_state:
+    st.session_state.processed_video_name = None
+if 'processing_complete' not in st.session_state:
+    st.session_state.processing_complete = False
+
 def get_download_link(file_path, filename):
     """Generate download link for processed video"""
-    with open(file_path, "rb") as f:
-        data = f.read()
-    b64 = base64.b64encode(data).decode()
-    href = f'<a href="data:video/mp4;base64,{b64}" download="{filename}">Download Processed Video</a>'
-    return href
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+        b64 = base64.b64encode(data).decode()
+        href = f'<a href="data:video/mp4;base64,{b64}" download="{filename}">📥 Download Processed Video</a>'
+        return href
+    except:
+        return "Download link unavailable"
 
 def detect_action(frame, model):
     """Detect action in frame"""
@@ -118,19 +128,50 @@ def main():
     st.subheader("Upload Video File")
     video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
     
-    if video_file is not None:
+    # Show download section if processing is complete
+    if st.session_state.processing_complete and st.session_state.processed_video_path:
+        st.success("✅ Video processing completed!")
+        st.markdown("### 📥 Download Processed Video")
+        
+        # Check if file still exists
+        if os.path.exists(st.session_state.processed_video_path):
+            download_link = get_download_link(
+                st.session_state.processed_video_path, 
+                st.session_state.processed_video_name
+            )
+            st.markdown(download_link, unsafe_allow_html=True)
+            
+            # Add a reset button
+            if st.button("🔄 Process Another Video"):
+                # Clean up old file
+                try:
+                    os.unlink(st.session_state.processed_video_path)
+                except:
+                    pass
+                # Reset session state
+                st.session_state.processing_complete = False
+                st.session_state.processed_video_path = None
+                st.session_state.processed_video_name = None
+                st.rerun()
+        else:
+            st.error("Processed video file not found. Please process the video again.")
+            st.session_state.processing_complete = False
+    
+    elif video_file is not None:
         # Create temporary file for video
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
             tmp_video.write(video_file.read())
             video_path = tmp_video.name
         
-        # Output file path
-        output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
-        
-        st.write("Video uploaded successfully!")
+        st.write("✅ Video uploaded successfully!")
         
         # Process button
-        if st.button("Process Video"):
+        if st.button("🚀 Process Video"):
+            # Create output file path that persists
+            output_dir = tempfile.mkdtemp()
+            output_filename = f"processed_{video_file.name}"
+            output_path = os.path.join(output_dir, output_filename)
+            
             # Progress indicators
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -139,38 +180,35 @@ def main():
             success = process_video(video_path, output_path, progress_bar, status_text)
             
             if success:
-                st.success("Video processing completed!")
-                
-                # Download link
-                st.markdown("### Download Processed Video")
-                download_filename = f"processed_{video_file.name}"
-                download_link = get_download_link(output_path, download_filename)
-                st.markdown(download_link, unsafe_allow_html=True)
+                # Store in session state
+                st.session_state.processed_video_path = output_path
+                st.session_state.processed_video_name = output_filename
+                st.session_state.processing_complete = True
+                st.rerun()  # Refresh to show download section
             else:
-                st.error("Video processing failed. Please check your file and try again.")
+                st.error("❌ Video processing failed. Please check your file and try again.")
         
-        # Cleanup temporary files on app restart
+        # Cleanup temporary upload file
         try:
             os.unlink(video_path)
         except:
             pass
     
     else:
-        st.info("Please upload a video file to begin processing.")
+        st.info("📤 Please upload a video file to begin processing.")
     
     # Instructions
     st.markdown("---")
-    st.subheader("Instructions")
+    st.subheader("📋 Instructions")
     st.write("1. Upload your video file (supported formats: MP4, AVI, MOV, MKV)")
-    st.write("2. Click 'Process Video' to start fall detection")
+    st.write("2. Click '🚀 Process Video' to start fall detection")
     st.write("3. Download the processed video with fall detection annotations")
     
     st.markdown("---")
-    st.subheader("Fall Detection Logic")
-    st.write("- Green box: Walking/Sitting detected")
-    st.write("- Yellow box: Fall detected (counting down to alert)")
-    st.write("- Red box: Fall alert triggered (person down for 10+ seconds)")
+    st.subheader("🎯 Fall Detection Logic")
+    st.write("- 🟢 Green box: Walking/Sitting detected")
+    st.write("- 🟡 Yellow box: Fall detected (counting down to alert)")
+    st.write("- 🔴 Red box: Fall alert triggered (person down for 10+ seconds)")
 
 if __name__ == "__main__":
     main()
-
