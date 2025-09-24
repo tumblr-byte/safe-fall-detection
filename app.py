@@ -251,59 +251,6 @@ def main():
         
         else:
             st.info("📤 Please upload a video file to begin processing.")
-                output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
-                output_path = os.path.join(tempfile.gettempdir(), output_filename)
-                
-                # Progress indicators
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # Show processing info
-                with st.spinner('Processing video... Please wait...'):
-                    # Process video
-                    success = process_video(video_path, output_path, progress_bar, status_text)
-                
-                # IMMEDIATELY update session state and show download
-                if success:
-                    # Store in session state
-                    st.session_state.processed_video_path = output_path
-                    st.session_state.processed_video_name = output_filename
-                    st.session_state.processing_complete = True
-                    
-                    # Force immediate UI update
-                    progress_bar.progress(1.0)
-                    status_text.success("🎉 Processing completed!")
-                    
-                    st.balloons()  # Celebration effect!
-                    
-                    # Force page refresh to show download at top
-                    st.rerun()
-                else:
-                    st.error("❌ Video processing failed. Please check your file and try again.")
-            
-            # Cleanup temporary upload file
-            try:
-                os.unlink(video_path)
-            except:
-                pass
-        
-        else:
-            st.info("📤 Please upload a video file to begin processing.")
-    
-    else:
-        # Show message that processing is complete and user can download above
-        st.info("🎉 Your video has been processed! Use the download button above.")
-        
-        # Only show the reset button here
-        if st.button("🔄 Process Another Video", key="main_reset"):
-            try:
-                os.unlink(st.session_state.processed_video_path)
-            except:
-                pass
-            st.session_state.processing_complete = False
-            st.session_state.processed_video_path = None
-            st.session_state.processed_video_name = None
-            st.rerun()
     
     # Instructions
     with st.expander("📋 Instructions", expanded=False):
