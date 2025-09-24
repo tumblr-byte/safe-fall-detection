@@ -31,9 +31,10 @@ def detect_action(frame, model):
 def process_video(input_path, output_path, progress_bar, status_text):
     """Process video with fall detection"""
     try:
-        # Load model once
+        # Load model once with optimizations
         status_text.text("Loading YOLO model...")
         model = YOLO("best.pt")
+        model.fuse()  # Optimize model for inference
         classes = ["Fall Detected", "Walking", "Sitting"]
         
         # Open video
@@ -46,22 +47,28 @@ def process_video(input_path, output_path, progress_bar, status_text):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        # Reduce frame size for faster processing (optional)
-        # new_width = min(640, width)
-        # new_height = int((new_width / width) * height)
+        # Resize for faster processing
+        process_width = min(640, width)  # Limit processing width
+        process_height = int((process_width / width) * height)
+        scale_x = width / process_width
+        scale_y = height / process_height
         
-        # Setup video writer with better codec
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Changed from mp4v to XVID for better performance
+        # Setup video writer
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
         fall_start_time = None
         fall_frame_count = 0
         frame_count = 0
         
-        # Process every nth frame for speed (process every 2nd frame)
-        skip_frames = 2
+        # Process every 5th frame for much faster processing
+        skip_frames = 5
         
-        status_text.text("Processing video frames...")
+        status_text.text(f"Processing video frames... ({total_frames} total)")
+        
+        # Batch processing variables
+        last_detection = None
+        detection_confidence = 0
         
         while True:
             ret, frame = cap.read()
@@ -70,52 +77,67 @@ def process_video(input_path, output_path, progress_bar, status_text):
             
             frame_count += 1
             
-            # Update progress more efficiently
-            if frame_count % 10 == 0:  # Update progress every 10 frames
+            # Update progress less frequently
+            if frame_count % 20 == 0:
                 progress = frame_count / total_frames
                 progress_bar.progress(progress)
+                status_text.text(f"Processing frame {frame_count}/{total_frames}")
             
-            # Skip frames for faster processing
-            if frame_count % skip_frames != 0:
-                out.write(frame)
-                continue
-            
-            # Run detection
-            cls_id, conf, x1, y1, x2, y2 = detect_action(frame, model)
-            
-            if cls_id is None:
-                out.write(frame)
-                continue
-            
-            label = classes[int(cls_id)]
-            
-            if label == "Fall Detected":
-                if fall_start_time is None:
-                    fall_start_time = frame_count / fps  # Use frame-based timing
-                    fall_frame_count = 0
-                else:
-                    fall_frame_count += skip_frames
-                    elapsed_seconds = fall_frame_count / fps
+            # Only run detection on selected frames
+            if frame_count % skip_frames == 0:
+                # Resize frame for detection
+                small_frame = cv2.resize(frame, (process_width, process_height))
+                
+                # Run detection on smaller frame
+                cls_id, conf, x1, y1, x2, y2 = detect_action(small_frame, model)
+                
+                if cls_id is not None:
+                    # Scale coordinates back to original size
+                    x1 = int(x1 * scale_x)
+                    y1 = int(y1 * scale_y)
+                    x2 = int(x2 * scale_x)
+                    y2 = int(y2 * scale_y)
                     
-                    if elapsed_seconds >= 10:  # 10 seconds threshold
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                        cv2.putText(frame, "ALERT! Fall detected for 10s",
-                                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                                    1, (0, 0, 255), 2)
+                    last_detection = (cls_id, conf, x1, y1, x2, y2)
+                    detection_confidence = conf
+                else:
+                    # Decay confidence if no detection
+                    detection_confidence *= 0.8
+                    if detection_confidence < 0.3:
+                        last_detection = None
+            
+            # Use last detection for annotation
+            if last_detection is not None and detection_confidence > 0.3:
+                cls_id, conf, x1, y1, x2, y2 = last_detection
+                label = classes[int(cls_id)]
+                
+                if label == "Fall Detected":
+                    if fall_start_time is None:
+                        fall_start_time = frame_count / fps
+                        fall_frame_count = 0
                     else:
-                        remaining = int(10 - elapsed_seconds)
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
-                        cv2.putText(frame, f"Fall detected, alert in {remaining}s",
-                                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                                    1, (0, 255, 255), 2)
-            else:
-                fall_start_time = None
-                fall_frame_count = 0
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)  # Changed color
-                cv2.putText(frame, label,
-                            (x1, y1 - 10),  # Adjusted position
-                            cv2.FONT_HERSHEY_SIMPLEX,  # Changed font
-                            0.7, (0, 255, 0), 2)  # Smaller font size
+                        fall_frame_count += 1
+                        elapsed_seconds = fall_frame_count / fps
+                        
+                        if elapsed_seconds >= 10:
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                            cv2.putText(frame, "ALERT! Fall detected for 10s",
+                                        (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.8, (0, 0, 255), 2)
+                        else:
+                            remaining = int(10 - elapsed_seconds)
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
+                            cv2.putText(frame, f"Fall detected, alert in {remaining}s",
+                                        (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.7, (0, 255, 255), 2)
+                else:
+                    fall_start_time = None
+                    fall_frame_count = 0
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, label,
+                                (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.6, (0, 255, 0), 2)
             
             out.write(frame)
         
@@ -175,17 +197,18 @@ def main():
         
         # Process button
         if st.button("🚀 Process Video"):
-            # Create output file path
-            output_dir = tempfile.mkdtemp()
-            output_filename = f"processed_{video_file.name}"
-            output_path = os.path.join(output_dir, output_filename)
+            # Create output file path with better naming
+            output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"  # Changed to .avi for better compatibility
+            output_path = os.path.join(tempfile.gettempdir(), output_filename)
             
             # Progress indicators
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Process video
-            success = process_video(video_path, output_path, progress_bar, status_text)
+            # Show processing info
+            with st.spinner('Processing video... This may take a few minutes.'):
+                # Process video
+                success = process_video(video_path, output_path, progress_bar, status_text)
             
             if success:
                 # Store in session state
@@ -194,6 +217,7 @@ def main():
                 st.session_state.processing_complete = True
                 # No st.rerun() - let the user see the result naturally
                 st.balloons()  # Celebration effect!
+                st.success("🎉 Processing completed! Scroll up to download your video.")
             else:
                 st.error("❌ Video processing failed. Please check your file and try again.")
         
