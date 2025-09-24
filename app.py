@@ -77,8 +77,8 @@ def process_video(input_path, output_path, progress_bar, status_text):
             
             frame_count += 1
             
-            # Update progress less frequently
-            if frame_count % 20 == 0:
+            # Update progress less frequently (every 10 frames, not 20)
+            if frame_count % 10 == 0:
                 progress = frame_count / total_frames
                 progress_bar.progress(progress)
                 status_text.text(f"Processing frame {frame_count}/{total_frames}")
