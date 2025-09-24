@@ -1,3 +1,7 @@
+import os
+os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
+
+
 import streamlit as st
 import cv2
 import tempfile
@@ -169,3 +173,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
