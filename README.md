@@ -54,6 +54,11 @@ Early detection can save lives by ensuring help arrives quickly.
 
 ---
 
+---
+## Optimization: For faster processing, the system analyzes every 2nd frame.  
+The fall alert countdown is based on real-time seconds, so skipping frames does **not delay or miss alerts**.
+
+---
 ## Future Scope
 
 While the current system is optimized for detecting falls of a **single person** (ideal for elderly individuals living alone), there are several opportunities for expansion:
