@@ -61,8 +61,8 @@ def process_video(input_path, output_path, progress_bar, status_text):
         fall_frame_count = 0
         frame_count = 0
         
-        # Process every 5th frame for much faster processing
-        skip_frames = 5
+        # Process every 2nd frame (as you requested - not too much skipping)
+        skip_frames = 2
         
         status_text.text(f"Processing video frames... ({total_frames} total)")
         
@@ -102,12 +102,12 @@ def process_video(input_path, output_path, progress_bar, status_text):
                     detection_confidence = conf
                 else:
                     # Decay confidence if no detection
-                    detection_confidence *= 0.8
-                    if detection_confidence < 0.3:
+                    detection_confidence *= 0.9  # Less aggressive decay
+                    if detection_confidence < 0.5:
                         last_detection = None
             
             # Use last detection for annotation
-            if last_detection is not None and detection_confidence > 0.3:
+            if last_detection is not None and detection_confidence > 0.5:
                 cls_id, conf, x1, y1, x2, y2 = last_detection
                 label = classes[int(cls_id)]
                 
@@ -198,7 +198,7 @@ def main():
         # Process button
         if st.button("🚀 Process Video"):
             # Create output file path with better naming
-            output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"  # Changed to .avi for better compatibility
+            output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
             output_path = os.path.join(tempfile.gettempdir(), output_filename)
             
             # Progress indicators
@@ -206,18 +206,41 @@ def main():
             status_text = st.empty()
             
             # Show processing info
-            with st.spinner('Processing video... This may take a few minutes.'):
+            with st.spinner('Processing video... Please wait...'):
                 # Process video
                 success = process_video(video_path, output_path, progress_bar, status_text)
             
+            # IMMEDIATELY update session state and show download
             if success:
                 # Store in session state
                 st.session_state.processed_video_path = output_path
                 st.session_state.processed_video_name = output_filename
                 st.session_state.processing_complete = True
-                # No st.rerun() - let the user see the result naturally
-                st.balloons()  # Celebration effect!
-                st.success("🎉 Processing completed! Scroll up to download your video.")
+                
+                # Force immediate UI update
+                progress_bar.progress(1.0)
+                status_text.success("🎉 Processing completed!")
+                
+                # Show download section immediately
+                st.success("✅ Video processing completed!")
+                st.markdown("### 📥 Download Your Processed Video")
+                
+                # Immediate download button
+                if os.path.exists(output_path):
+                    with open(output_path, 'rb') as file:
+                        st.download_button(
+                            label="📥 Download Processed Video",
+                            data=file.read(),
+                            file_name=output_filename,
+                            mime="video/avi",
+                            key="immediate_download"
+                        )
+                    st.balloons()  # Celebration effect!
+                    
+                    # Force page refresh to show download at top
+                    st.rerun()
+                else:
+                    st.error("Error: Processed video file not found.")
             else:
                 st.error("❌ Video processing failed. Please check your file and try again.")
         
