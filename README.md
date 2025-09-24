@@ -52,3 +52,29 @@ Early detection can save lives by ensuring help arrives quickly.
 - YOLO12 (Ultralytics)  
 - Streamlit  
 
+
+## Future Scope
+
+While the current system is optimized for detecting falls of a **single person** (ideal for elderly individuals living alone), there are several opportunities for expansion:
+
+### 1. Multi-Person Detection
+- Extend the system to track and monitor multiple individuals simultaneously in crowded environments such as hospitals, care centers, or workplaces.
+
+### 2. Real-Time Notifications
+- Integrate with messaging/alert systems (SMS, WhatsApp, email) to immediately notify caregivers, family members, or emergency services when a fall is detected.
+
+### 3. Wearable & IoT Integration
+- Connect with smartwatches, health monitors, or IoT devices to gather additional health data (e.g., heart rate, oxygen levels) alongside fall detection for more reliable alerts.
+
+### 4. Cloud & Edge Deployment
+- Deploy the system on low-cost edge devices (Raspberry Pi, Jetson Nano) or cloud platforms for real-time monitoring without requiring expensive hardware.
+
+### 5. Dataset Expansion & Accuracy
+- Train on larger, more diverse datasets (different body types, lighting, camera angles) to reduce false positives and improve robustness in real-world conditions.
+
+### 6. User-Friendly Interfaces
+- Build mobile and web dashboards for caregivers to monitor status, view alerts, and analyze incident history with visualizations.
+
+### 7. Accessibility & Inclusivity
+- Localize alerts into multiple languages and support voice-based notifications for visually impaired users.
+
