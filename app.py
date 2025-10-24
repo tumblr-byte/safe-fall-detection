@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============ GLOBAL CONSTANTS ============
+
 HOSPITALS = [
     {
         "name": "City General Hospital",
@@ -54,7 +54,7 @@ USER_LOCATION = {
     "phone": "+91-98765-43210"
 }
 
-# Initialize session state
+
 if 'processed_video_path' not in st.session_state:
     st.session_state.processed_video_path = None
 if 'processed_video_name' not in st.session_state:
@@ -69,7 +69,6 @@ if 'alert_sent' not in st.session_state:
     st.session_state.alert_sent = False
 
 def save_fall_snapshot(frame):
-    """Save fall detection snapshot as base64 in memory"""
     try:
         if frame is None or frame.size == 0:
             return None
@@ -79,15 +78,14 @@ def save_fall_snapshot(frame):
         
         if success:
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-            print(f"✅ Snapshot saved in memory ({len(jpg_as_text)} bytes)")
+            print(f"Snapshot saved in memory ({len(jpg_as_text)} bytes)")
             return jpg_as_text
         return None
     except Exception as e:
-        print(f"❌ Error saving snapshot: {e}")
+        print(f"Error saving snapshot: {e}")
         return None
 
 def create_emergency_alert(fall_duration, snapshot_base64):
-    """Create emergency alert when fall detected"""
     alert = {
         "id": len(st.session_state.emergency_alerts) + 1,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -101,7 +99,6 @@ def create_emergency_alert(fall_duration, snapshot_base64):
     return alert
 
 def detect_action(frame, model):
-    """Detect action in frame"""
     results = model(frame)
     for result in results:
         boxes = result.boxes.cpu().numpy()
@@ -113,7 +110,6 @@ def detect_action(frame, model):
     return None, None, None, None, None, None, None
 
 def process_video(input_path, output_path, progress_bar, status_text):
-    """Process video with fall detection"""
     try:
         status_text.text("Loading YOLO model...")
         model = YOLO("best.pt")
@@ -238,16 +234,14 @@ def process_video(input_path, output_path, progress_bar, status_text):
         return False
 
 def user_upload_view():
-    """View 1: User Upload Video"""
     st.title("👤 User - Upload Video for Fall Detection")
     
-    st.subheader("📤 Upload Video File")
+    st.subheader("Upload Video File")
     video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
     
     if video_file is not None:
-        st.write("✅ Video uploaded successfully!")
+        st.write("Video uploaded successfully!")
         
-        # Video preview with fixed size
         st.markdown("""
             <style>
             video {
@@ -259,7 +253,7 @@ def user_upload_view():
         """, unsafe_allow_html=True)
         st.video(video_file)
         
-        if st.button("🚀 Process Video with Fall Detection"):
+        if st.button("Process Video with Fall Detection"):
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
                 video_file.seek(0)
                 tmp_video.write(video_file.read())
@@ -280,11 +274,11 @@ def user_upload_view():
                 st.session_state.processing_complete = True
                 
                 progress_bar.progress(1.0)
-                status_text.success("🎉 Processing completed!")
+                status_text.success("Processing completed!")
                 
                 if st.session_state.alert_sent:
                     st.balloons()
-                    st.error("🚨 EMERGENCY DETECTED! Check Family Dashboard to see alert details!")
+                    st.error("EMERGENCY DETECTED! Check Family Dashboard to see alert details!")
                 
                 st.rerun()
             
@@ -293,22 +287,22 @@ def user_upload_view():
             except:
                 pass
     else:
-        st.info("📤 Please upload a video file to begin monitoring.")
+        st.info("Please upload a video file to begin monitoring.")
     
-    # Show processing results
+
     if st.session_state.processing_complete and st.session_state.processed_video_path:
         if os.path.exists(st.session_state.processed_video_path):
-            st.success("✅ Video processing completed!")
+            st.success("Video processing completed!")
             
             with open(st.session_state.processed_video_path, 'rb') as file:
                 st.download_button(
-                    label="📥 Download Processed Video",
+                    label="Download Processed Video",
                     data=file.read(),
                     file_name=st.session_state.processed_video_name,
                     mime="video/mp4"
                 )
             
-            if st.button("🔄 Process Another Video"):
+            if st.button("Process Another Video"):
                 try:
                     os.unlink(st.session_state.processed_video_path)
                 except:
@@ -320,26 +314,25 @@ def user_upload_view():
                 st.rerun()
 
 def family_dashboard():
-    """View 2: Family Dashboard - See All Alerts & Hospitals Notified"""
     st.title("👨‍👩‍👧 Family Dashboard - Emergency Monitoring")
     
     if st.session_state.alert_sent and st.session_state.emergency_alerts:
         latest_alert = st.session_state.emergency_alerts[0]
-        st.error(f"🚨 **EMERGENCY ALERT ACTIVE** - Alert sent at {latest_alert['timestamp']}")
+        st.error(f" **EMERGENCY ALERT ACTIVE** - Alert sent at {latest_alert['timestamp']}")
         
         st.markdown("---")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("### 📍 Patient Information")
+            st.markdown("### Patient Information")
             st.write(f"**Location:** {USER_LOCATION['address']}")
             st.write(f"**Contact:** {USER_LOCATION['phone']}")
             st.write(f"**Fall Duration:** {latest_alert['fall_duration']:.1f} seconds")
             st.write(f"**Alert Time:** {latest_alert['timestamp']}")
             
             # Show fall image
-            st.markdown("### 📸 Fall Detection Image")
+            st.markdown("### Fall Detection Image")
             snapshot_data = latest_alert.get('snapshot_data')
             if snapshot_data:
                 try:
@@ -349,31 +342,30 @@ def family_dashboard():
                     if img is not None:
                         st.image(img, caption="Fall Detection Snapshot", use_column_width=True)
                 except:
-                    st.info("📸 Image loading...")
+                    st.info(" Image loading...")
         
         with col2:
             st.markdown("### 🏥 Hospitals Notified")
-            st.success(f"✅ Alert sent to {len(HOSPITALS)} nearby hospitals")
+            st.success(f" Alert sent to {len(HOSPITALS)} nearby hospitals")
             
             for idx, hospital in enumerate(HOSPITALS, 1):
                 with st.container():
                     st.markdown(f"**{idx}. {hospital['name']}**")
                     st.write(f"📍 {hospital['address']}")
                     st.write(f"📞 {hospital['phone']}")
-                    st.write(f"🚗 Distance: {hospital['distance']}")
+                    st.write(f"🚑 Distance: {hospital['distance']}")
                     st.markdown("---")
             
-            st.info("💡 Whichever hospital responds first will send help!")
+            st.info("Whichever hospital responds first will send help!")
     
     else:
-        st.success("✅ No emergency alerts. System monitoring...")
+        st.success("No emergency alerts. System monitoring...")
         st.info("When a fall is detected for more than 10 seconds, an alert will be sent to nearby hospitals automatically.")
     
-    if st.button("🔄 Refresh Dashboard"):
+    if st.button("Refresh Dashboard"):
         st.rerun()
 
 def hospital_view():
-    """View 3: Individual Hospital View - ONE Hospital Sees ONLY Patient Info"""
     st.title("🏥 Hospital Emergency Response Center")
     
     # Hospital selector (simulating which hospital is logged in)
@@ -402,10 +394,10 @@ def hospital_view():
     
     # Show alerts
     if st.session_state.emergency_alerts:
-        st.subheader("🚨 Emergency Alerts")
+        st.subheader("Emergency Alerts")
         
         for alert in st.session_state.emergency_alerts:
-            with st.expander(f"⚠️ ALERT #{alert['id']} - {alert['timestamp']} - {alert['status']}", expanded=True):
+            with st.expander(f"ALERT #{alert['id']} - {alert['timestamp']} - {alert['status']}", expanded=True):
                 
                 col1, col2 = st.columns([2, 1])
                 
@@ -451,38 +443,38 @@ def hospital_view():
                             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
                             
                             if img is not None:
-                                st.image(img, caption="Fall Detected", use_column_width=True)
+                                st.image(img, caption="Fall Detection Snapshot", width=400)
                             else:
-                                st.warning("⚠️ Image loading...")
+                                st.warning("Image loading...")
                         except Exception as e:
-                            st.error(f"❌ Error: {str(e)}")
+                            st.error(f"Error: {str(e)}")
                     else:
                         st.info("📸 No image available")
                 
                 st.markdown("---")
-                st.info("💡 **Note:** This alert was also sent to other nearby hospitals. Whichever hospital responds first should dispatch help.")
+                st.info("**Note:** This alert was also sent to other nearby hospitals. Whichever hospital responds first should dispatch help.")
     
     else:
-        st.success("✅ No active emergency alerts. System monitoring...")
+        st.success("No active emergency alerts. System monitoring...")
     
-    if st.button("🔄 Refresh Alerts"):
+    if st.button("Refresh Alerts"):
         st.rerun()
 
 def main():
     # Sidebar navigation - 3 VIEWS
-    st.sidebar.title("🚨 Select View")
+    st.sidebar.title("Select View")
     page = st.sidebar.radio(
         "Choose Dashboard:",
         ["👤 User - Upload Video", "👨‍👩‍👧 Family Dashboard", "🏥 Hospital Emergency Center"]
     )
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📊 System Status")
+    st.sidebar.markdown("### System Status")
     st.sidebar.info(f"Active Alerts: {len(st.session_state.emergency_alerts)}")
     st.sidebar.info(f"Hospitals: {len(HOSPITALS)}")
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### ℹ️ About System")
+    st.sidebar.markdown("### About System")
     st.sidebar.write("**Fall Detection Emergency Response**")
     st.sidebar.write("Automatic hospital alerts when fall >10s detected")
     
@@ -496,3 +488,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
