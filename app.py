@@ -7,6 +7,15 @@ import tempfile
 import os
 from ultralytics import YOLO
 import time
+from datetime import datetime
+import json
+
+# Page configuration
+st.set_page_config(
+    page_title="Fall Detection Emergency System",
+    page_icon="🚨",
+    layout="wide"
+)
 
 # Initialize session state
 if 'processed_video_path' not in st.session_state:
@@ -15,6 +24,67 @@ if 'processed_video_name' not in st.session_state:
     st.session_state.processed_video_name = None
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
+if 'emergency_alerts' not in st.session_state:
+    st.session_state.emergency_alerts = []
+if 'fall_snapshot' not in st.session_state:
+    st.session_state.fall_snapshot = None
+if 'alert_sent' not in st.session_state:
+    st.session_state.alert_sent = False
+
+# Fake hospital database with coordinates
+HOSPITALS = [
+    {
+        "name": "City General Hospital",
+        "address": "123 Medical Center Dr, Downtown",
+        "lat": 28.6139,
+        "lng": 77.2090,
+        "distance": "2.3 km",
+        "phone": "+91-11-2345-6789"
+    },
+    {
+        "name": "Emergency Care Center",
+        "address": "456 Healthcare Ave, Central District",
+        "lat": 28.6180,
+        "lng": 77.2150,
+        "distance": "3.1 km",
+        "phone": "+91-11-2345-6790"
+    },
+    {
+        "name": "Metro Medical Hospital",
+        "address": "789 Wellness Blvd, Medical District",
+        "lat": 28.6100,
+        "lng": 77.2050,
+        "distance": "4.2 km",
+        "phone": "+91-11-2345-6791"
+    }
+]
+
+# Fake user location (can be customized)
+USER_LOCATION = {
+    "address": "45 Residential Complex, Sector 12, Ghaziabad",
+    "lat": 28.6139,
+    "lng": 77.2090
+}
+
+def save_fall_snapshot(frame):
+    """Save fall detection snapshot"""
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+    cv2.imwrite(temp_file.name, frame)
+    return temp_file.name
+
+def create_emergency_alert(fall_duration, snapshot_path):
+    """Create emergency alert when fall detected"""
+    alert = {
+        "id": len(st.session_state.emergency_alerts) + 1,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "location": USER_LOCATION,
+        "fall_duration": fall_duration,
+        "snapshot_path": snapshot_path,
+        "status": "CRITICAL",
+        "hospitals_notified": len(HOSPITALS)
+    }
+    st.session_state.emergency_alerts.insert(0, alert)
+    return alert
 
 def detect_action(frame, model):
     """Detect action in frame"""
@@ -25,48 +95,41 @@ def detect_action(frame, model):
             cls_id = box.cls[0]
             conf = box.conf[0]
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-            return cls_id, conf, x1, y1, x2, y2
-    return None, None, None, None, None, None
+            return cls_id, conf, x1, y1, x2, y2, frame
+    return None, None, None, None, None, None, None
 
 def process_video(input_path, output_path, progress_bar, status_text):
-    """Process video with fall detection"""
+    """Process video with fall detection and emergency alerts"""
     try:
-        # Load model once with optimizations
         status_text.text("Loading YOLO model...")
         model = YOLO("best.pt")
-        model.fuse()  # Optimize model for inference
+        model.fuse()
         classes = ["Fall Detected", "Walking", "Sitting"]
         
-        # Open video
         status_text.text("Opening video file...")
         cap = cv2.VideoCapture(input_path)
         
-        # Get video properties
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        # Resize for faster processing
-        process_width = min(640, width)  # Limit processing width
+        process_width = min(640, width)
         process_height = int((process_width / width) * height)
         scale_x = width / process_width
         scale_y = height / process_height
         
-        # Setup video writer
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
         fall_start_time = None
         fall_frame_count = 0
         frame_count = 0
-        
-        # Process every 2nd frame (as you requested - not too much skipping)
         skip_frames = 2
+        alert_triggered = False
         
         status_text.text(f"Processing video frames... ({total_frames} total)")
         
-        # Batch processing variables
         last_detection = None
         detection_confidence = 0
         
@@ -77,38 +140,30 @@ def process_video(input_path, output_path, progress_bar, status_text):
             
             frame_count += 1
             
-            # Update progress less frequently (every 10 frames, not 20)
             if frame_count % 10 == 0:
                 progress = frame_count / total_frames
                 progress_bar.progress(progress)
                 status_text.text(f"Processing frame {frame_count}/{total_frames}")
             
-            # Only run detection on selected frames
             if frame_count % skip_frames == 0:
-                # Resize frame for detection
                 small_frame = cv2.resize(frame, (process_width, process_height))
-                
-                # Run detection on smaller frame
-                cls_id, conf, x1, y1, x2, y2 = detect_action(small_frame, model)
+                cls_id, conf, x1, y1, x2, y2, detected_frame = detect_action(small_frame, model)
                 
                 if cls_id is not None:
-                    # Scale coordinates back to original size
                     x1 = int(x1 * scale_x)
                     y1 = int(y1 * scale_y)
                     x2 = int(x2 * scale_x)
                     y2 = int(y2 * scale_y)
                     
-                    last_detection = (cls_id, conf, x1, y1, x2, y2)
+                    last_detection = (cls_id, conf, x1, y1, x2, y2, frame.copy())
                     detection_confidence = conf
                 else:
-                    # Decay confidence if no detection
-                    detection_confidence *= 0.9  # Less aggressive decay
+                    detection_confidence *= 0.9
                     if detection_confidence < 0.5:
                         last_detection = None
             
-            # Use last detection for annotation
             if last_detection is not None and detection_confidence > 0.5:
-                cls_id, conf, x1, y1, x2, y2 = last_detection
+                cls_id, conf, x1, y1, x2, y2, detected_frame = last_detection
                 label = classes[int(cls_id)]
                 
                 if label == "Fall Detected":
@@ -119,9 +174,24 @@ def process_video(input_path, output_path, progress_bar, status_text):
                         fall_frame_count += 1
                         elapsed_seconds = fall_frame_count / fps
                         
-                        if elapsed_seconds >= 10:
+                        # Trigger alert at 10 seconds
+                        if elapsed_seconds >= 10 and not alert_triggered:
+                            snapshot_path = save_fall_snapshot(detected_frame)
+                            st.session_state.fall_snapshot = snapshot_path
+                            create_emergency_alert(elapsed_seconds, snapshot_path)
+                            alert_triggered = True
+                            st.session_state.alert_sent = True
+                            
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                            cv2.putText(frame, "ALERT! Fall detected for 10s",
+                            cv2.putText(frame, "🚨 EMERGENCY ALERT SENT! 🚨",
+                                        (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.8, (0, 0, 255), 2)
+                            cv2.putText(frame, f"Hospitals notified - Fall: {int(elapsed_seconds)}s",
+                                        (50, 90), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.6, (0, 0, 255), 2)
+                        elif elapsed_seconds >= 10:
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                            cv2.putText(frame, f"🚨 ALERT ACTIVE - Fall: {int(elapsed_seconds)}s",
                                         (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                         0.8, (0, 0, 255), 2)
                         else:
@@ -133,6 +203,7 @@ def process_video(input_path, output_path, progress_bar, status_text):
                 else:
                     fall_start_time = None
                     fall_frame_count = 0
+                    alert_triggered = False
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(frame, label,
                                 (x1, y1 - 10),
@@ -151,26 +222,41 @@ def process_video(input_path, output_path, progress_bar, status_text):
         status_text.text(f"Error during processing: {str(e)}")
         return False
 
-def main():
-    st.title("🎥 Fall Detection Video Processor")
-    st.write("Upload a video file to detect falls and generate alerts.")
+def user_dashboard():
+    """User/Caregiver Dashboard"""
+    st.title("🎥 Fall Detection Emergency System - User Dashboard")
+    
+    # Alert status at top
+    if st.session_state.alert_sent and st.session_state.emergency_alerts:
+        latest_alert = st.session_state.emergency_alerts[0]
+        st.error(f"🚨 **EMERGENCY ALERT ACTIVE** - Sent to {latest_alert['hospitals_notified']} hospitals at {latest_alert['timestamp']}")
     
     # Show download section if processing is complete
     if st.session_state.processing_complete and st.session_state.processed_video_path:
         if os.path.exists(st.session_state.processed_video_path):
             st.success("✅ Video processing completed!")
-            st.markdown("### 📥 Download Your Processed Video")
             
-            # Simple download button using Streamlit's built-in download
-            with open(st.session_state.processed_video_path, 'rb') as file:
-                st.download_button(
-                    label="📥 Download Processed Video",
-                    data=file.read(),
-                    file_name=st.session_state.processed_video_name,
-                    mime="video/mp4"
-                )
+            col1, col2 = st.columns(2)
             
-            # Reset button
+            with col1:
+                st.markdown("### 📥 Download Processed Video")
+                with open(st.session_state.processed_video_path, 'rb') as file:
+                    st.download_button(
+                        label="📥 Download Processed Video",
+                        data=file.read(),
+                        file_name=st.session_state.processed_video_name,
+                        mime="video/mp4"
+                    )
+            
+            with col2:
+                st.markdown("### 🚨 Emergency Status")
+                if st.session_state.alert_sent:
+                    st.error("**ALERT SENT TO HOSPITALS**")
+                    st.info(f"📍 Location: {USER_LOCATION['address']}")
+                    st.info(f"🏥 Hospitals Notified: {len(HOSPITALS)}")
+                else:
+                    st.success("No emergency detected")
+            
             if st.button("🔄 Process Another Video"):
                 try:
                     os.unlink(st.session_state.processed_video_path)
@@ -179,89 +265,132 @@ def main():
                 st.session_state.processing_complete = False
                 st.session_state.processed_video_path = None
                 st.session_state.processed_video_name = None
+                st.session_state.alert_sent = False
                 st.rerun()
-        else:
-            st.error("Processed video file not found. Please process the video again.")
-            st.session_state.processing_complete = False
     
-    # File upload section - ONLY show if not processing complete
+    # File upload section
     if not st.session_state.processing_complete:
         st.subheader("📤 Upload Video File")
         video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
         
         if video_file is not None:
-            # IMPORTANT: Reset processing state when new video is uploaded
-            if st.session_state.processing_complete:
-                # Clean up old file
-                try:
-                    if st.session_state.processed_video_path:
-                        os.unlink(st.session_state.processed_video_path)
-                except:
-                    pass
-                # Reset state
-                st.session_state.processing_complete = False
-                st.session_state.processed_video_path = None
-                st.session_state.processed_video_name = None
-            
-            # Create temporary file for video
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
                 tmp_video.write(video_file.read())
                 video_path = tmp_video.name
             
             st.write("✅ Video uploaded successfully!")
             
-            # Process button
-            if st.button("🚀 Process Video"):
-                # Create output file path with better naming
+            if st.button("🚀 Process Video with Fall Detection"):
                 output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
                 output_path = os.path.join(tempfile.gettempdir(), output_filename)
                 
-                # Progress indicators
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                # Show processing info
-                with st.spinner('Processing video... Please wait...'):
-                    # Process video
+                with st.spinner('Processing video... Monitoring for falls...'):
                     success = process_video(video_path, output_path, progress_bar, status_text)
                 
-                # IMMEDIATELY update session state and show download
                 if success:
-                    # Store in session state
                     st.session_state.processed_video_path = output_path
                     st.session_state.processed_video_name = output_filename
                     st.session_state.processing_complete = True
                     
-                    # Force immediate UI update
                     progress_bar.progress(1.0)
                     status_text.success("🎉 Processing completed!")
                     
-                    st.balloons()  # Celebration effect!
+                    if st.session_state.alert_sent:
+                        st.balloons()
+                        st.warning("⚠️ EMERGENCY ALERT TRIGGERED! Check Hospital Dashboard.")
                     
-                    # Force page refresh to show download at top
                     st.rerun()
                 else:
-                    st.error("❌ Video processing failed. Please check your file and try again.")
+                    st.error("❌ Video processing failed.")
             
-            # Cleanup temporary upload file
             try:
                 os.unlink(video_path)
             except:
                 pass
-        
         else:
-            st.info("📤 Please upload a video file to begin processing.")
+            st.info("📤 Please upload a video file to begin monitoring.")
+
+def hospital_dashboard():
+    """Hospital Emergency Dashboard"""
+    st.title("🏥 Hospital Emergency Response Dashboard")
     
-    # Instructions
-    with st.expander("📋 Instructions", expanded=False):
-        st.write("1. Upload your video file (supported formats: MP4, AVI, MOV, MKV)")
-        st.write("2. Click '🚀 Process Video' to start fall detection")
-        st.write("3. Download the processed video with fall detection annotations")
+    # Stats row
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Active Alerts", len([a for a in st.session_state.emergency_alerts if a['status'] == 'CRITICAL']))
+    with col2:
+        st.metric("Total Alerts Today", len(st.session_state.emergency_alerts))
+    with col3:
+        st.metric("Response Time Avg", "2.3 min")
     
-    with st.expander("🎯 Fall Detection Logic", expanded=False):
-        st.write("- 🟢 Green box: Walking/Sitting detected")
-        st.write("- 🟡 Yellow box: Fall detected (counting down to alert)")
-        st.write("- 🔴 Red box: Fall alert triggered (person down for 10+ seconds)")
+    st.markdown("---")
+    
+    # Emergency alerts
+    if st.session_state.emergency_alerts:
+        st.subheader("🚨 Emergency Alerts")
+        
+        for alert in st.session_state.emergency_alerts:
+            with st.expander(f"⚠️ ALERT #{alert['id']} - {alert['timestamp']} - {alert['status']}", expanded=True):
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    st.markdown("### 📍 Patient Location")
+                    st.write(f"**Address:** {alert['location']['address']}")
+                    st.write(f"**Coordinates:** {alert['location']['lat']}, {alert['location']['lng']}")
+                    st.write(f"**Fall Duration:** {alert['fall_duration']:.1f} seconds")
+                    st.write(f"**Alert Time:** {alert['timestamp']}")
+                    
+                    # Google Maps Link
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={alert['location']['lat']},{alert['location']['lng']}"
+                    st.markdown(f"[🗺️ **Open in Google Maps**]({maps_url})")
+                    
+                    # Fall snapshot
+                    if alert['snapshot_path'] and os.path.exists(alert['snapshot_path']):
+                        st.markdown("### 📸 Fall Detection Image")
+                        st.image(alert['snapshot_path'], caption="Fall Detection Snapshot", use_container_width=True)
+                
+                with col2:
+                    st.markdown("### 🏥 Nearby Hospitals")
+                    for hospital in HOSPITALS:
+                        with st.container():
+                            st.markdown(f"**{hospital['name']}**")
+                            st.write(f"📍 {hospital['address']}")
+                            st.write(f"📞 {hospital['phone']}")
+                            st.write(f"🚗 Distance: {hospital['distance']}")
+                            
+                            hospital_maps_url = f"https://www.google.com/maps/dir/?api=1&origin={alert['location']['lat']},{alert['location']['lng']}&destination={hospital['lat']},{hospital['lng']}"
+                            st.markdown(f"[🚑 **Get Directions**]({hospital_maps_url})")
+                            st.markdown("---")
+    else:
+        st.info("✅ No active emergency alerts. System monitoring...")
+    
+    # Refresh button
+    if st.button("🔄 Refresh Dashboard"):
+        st.rerun()
+
+def main():
+    # Sidebar navigation
+    st.sidebar.title("🚨 Navigation")
+    page = st.sidebar.radio("Select View:", ["👤 User Dashboard", "🏥 Hospital Dashboard"])
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 System Info")
+    st.sidebar.info(f"Active Alerts: {len(st.session_state.emergency_alerts)}")
+    st.sidebar.info(f"Hospitals Connected: {len(HOSPITALS)}")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📋 About")
+    st.sidebar.write("Fall Detection Emergency Response System")
+    st.sidebar.write("Automatic hospital notification on fall detection >10s")
+    
+    # Route to correct dashboard
+    if page == "👤 User Dashboard":
+        user_dashboard()
+    else:
+        hospital_dashboard()
 
 if __name__ == "__main__":
     main()
