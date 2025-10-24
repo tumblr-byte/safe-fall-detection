@@ -68,19 +68,16 @@ if 'video_processed' not in st.session_state:
     st.session_state.video_processed = False
 
 def save_fall_snapshot(frame):
-    try:
-        if frame is None or frame.size == 0:
-            return None
-        
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        success, buffer = cv2.imencode('.jpg', frame_rgb, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        
-        if success:
-            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-            return jpg_as_text
+    if frame is None or frame.size == 0:
         return None
-    except Exception as e:
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    success, buffer = cv2.imencode('.jpg', frame_rgb, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    if not success:
         return None
+
+    return base64.b64encode(buffer).decode('utf-8')
+
 
 def create_emergency_alert(fall_duration, snapshot_base64):
     alert = {
@@ -106,129 +103,123 @@ def detect_action(frame, model):
             return cls_id, conf, x1, y1, x2, y2, frame
     return None, None, None, None, None, None, None
 
+
 def process_video(input_path, output_path, progress_bar, status_text):
-    try:
-        status_text.text("Loading YOLO model...")
-        model = YOLO("best.pt")
-        model.fuse()
-        classes = ["Fall Detected", "Walking", "Sitting"]
-        
-        status_text.text("Opening video file...")
-        cap = cv2.VideoCapture(input_path)
-        
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        
-        process_width = min(640, width)
-        process_height = int((process_width / width) * height)
-        scale_x = width / process_width
-        scale_y = height / process_height
-        
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-        
-        fall_start_time = None
-        fall_frame_count = 0
-        frame_count = 0
-        skip_frames = 2
-        alert_triggered = False
-        
-        status_text.text(f"Processing video frames... ({total_frames} total)")
-        
-        last_detection = None
-        detection_confidence = 0
-        
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            
-            frame_count += 1
-            
-            if frame_count % 10 == 0:
-                progress = frame_count / total_frames
-                progress_bar.progress(progress)
-                status_text.text(f"Processing frame {frame_count}/{total_frames}")
-            
-            if frame_count % skip_frames == 0:
-                small_frame = cv2.resize(frame, (process_width, process_height))
-                cls_id, conf, x1, y1, x2, y2, detected_frame = detect_action(small_frame, model)
-                
-                if cls_id is not None:
-                    x1 = int(x1 * scale_x)
-                    y1 = int(y1 * scale_y)
-                    x2 = int(x2 * scale_x)
-                    y2 = int(y2 * scale_y)
-                    
-                    last_detection = (cls_id, conf, x1, y1, x2, y2, frame.copy())
-                    detection_confidence = conf
-                else:
-                    detection_confidence *= 0.9
-                    if detection_confidence < 0.5:
-                        last_detection = None
-            
-            if last_detection is not None and detection_confidence > 0.5:
-                cls_id, conf, x1, y1, x2, y2, detected_frame = last_detection
-                label = classes[int(cls_id)]
-                
-                if label == "Fall Detected":
-                    if fall_start_time is None:
-                        fall_start_time = frame_count / fps
-                        fall_frame_count = 0
-                    else:
-                        fall_frame_count += 1
-                        elapsed_seconds = fall_frame_count / fps
-                        
-                        if elapsed_seconds >= 10 and not alert_triggered:
-                            snapshot_frame = frame.copy()
-                            cv2.rectangle(snapshot_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                            cv2.putText(snapshot_frame, "FALL DETECTED!", 
-                                      (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 
-                                      0.9, (0, 0, 255), 2)
-                            
-                            snapshot_data = save_fall_snapshot(snapshot_frame)
-                            
-                            if snapshot_data:
-                                st.session_state.fall_snapshot = snapshot_data
-                                create_emergency_alert(elapsed_seconds, snapshot_data)
-                                alert_triggered = True
-                                st.session_state.alert_sent = True
-                            
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                            cv2.putText(frame, "EMERGENCY ALERT SENT!",
-                                        (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.8, (0, 0, 255), 2)
-                        elif elapsed_seconds >= 10:
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                            cv2.putText(frame, f"ALERT ACTIVE - Fall: {int(elapsed_seconds)}s",
-                                        (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.8, (0, 0, 255), 2)
-                        else:
-                            remaining = int(10 - elapsed_seconds)
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
-                            cv2.putText(frame, f"Fall detected, alert in {remaining}s",
-                                        (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.7, (0, 255, 255), 2)
-                else:
-                    fall_start_time = None
-                    fall_frame_count = 0
-                    alert_triggered = False
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label, (x1, y1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            
-            out.write(frame)
-        
-        cap.release()
-        out.release()
-        status_text.text("Processing completed successfully!")
-        return True
-        
-    except Exception as e:
-        status_text.text(f"Error during processing: {str(e)}")
+    status_text.text("Loading YOLO model...")
+    model = YOLO("best.pt")
+    model.fuse()
+    classes = ["Fall Detected", "Walking", "Sitting"]
+
+    status_text.text("Opening video file...")
+    cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened():
+        status_text.text("Failed to open video file.")
         return False
+
+    # Get video properties
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+
+    process_width = min(640, width)
+    process_height = int((process_width / width) * height)
+    scale_x = width / process_width
+    scale_y = height / process_height
+
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+
+    fall_start_time = None
+    fall_frame_count = 0
+    frame_count = 0
+    skip_frames = 2
+    alert_triggered = False
+    last_detection = None
+    detection_confidence = 0
+
+    status_text.text(f"Processing video frames... ({total_frames} total)")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        frame_count += 1
+
+        # Update progress bar
+        if frame_count % 10 == 0:
+            progress = frame_count / total_frames
+            progress_bar.progress(progress)
+            status_text.text(f"Processing frame {frame_count}/{total_frames}")
+
+       
+        if frame_count % skip_frames == 0:
+            small_frame = cv2.resize(frame, (process_width, process_height))
+            cls_id, conf, x1, y1, x2, y2, _ = detect_action(small_frame, model)
+
+            if cls_id is not None:
+                x1, y1, x2, y2 = map(int, [x1 * scale_x, y1 * scale_y, x2 * scale_x, y2 * scale_y])
+                last_detection = (cls_id, conf, x1, y1, x2, y2, frame.copy())
+                detection_confidence = conf
+            else:
+                detection_confidence *= 0.9
+                if detection_confidence < 0.5:
+                    last_detection = None
+
+
+        if last_detection and detection_confidence > 0.5:
+            cls_id, conf, x1, y1, x2, y2, _ = last_detection
+            label = classes[int(cls_id)]
+
+            if label == "Fall Detected":
+                if fall_start_time is None:
+                    fall_start_time = frame_count / fps
+                    fall_frame_count = 0
+                else:
+                    fall_frame_count += 1
+                    elapsed_seconds = fall_frame_count / fps
+
+                    if elapsed_seconds >= 10 and not alert_triggered:
+                        snapshot_frame = frame.copy()
+                        cv2.rectangle(snapshot_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                        cv2.putText(snapshot_frame, "FALL DETECTED!", (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+
+                        snapshot_data = save_fall_snapshot(snapshot_frame)
+                        if snapshot_data:
+                            st.session_state.fall_snapshot = snapshot_data
+                            create_emergency_alert(elapsed_seconds, snapshot_data)
+                            alert_triggered = True
+                            st.session_state.alert_sent = True
+
+                        cv2.putText(frame, "EMERGENCY ALERT SENT!", (50, 50),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+                    elif elapsed_seconds >= 10:
+                        cv2.putText(frame, f"ALERT ACTIVE - Fall: {int(elapsed_seconds)}s",
+                                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    else:
+                        remaining = int(10 - elapsed_seconds)
+                        cv2.putText(frame, f"Fall detected, alert in {remaining}s",
+                                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            else:
+                fall_start_time = None
+                fall_frame_count = 0
+                alert_triggered = False
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(frame, label, (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        out.write(frame)
+
+    cap.release()
+    out.release()
+    status_text.text("Processing completed successfully!")
+    return True
+
 
 def user_upload_view():
     st.title("User - Upload Video for Fall Detection")
@@ -477,3 +468,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
