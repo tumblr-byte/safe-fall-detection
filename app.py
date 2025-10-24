@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============ GLOBAL CONSTANTS (Define at top) ============
+# ============ GLOBAL CONSTANTS ============
 HOSPITALS = [
     {
         "name": "City General Hospital",
@@ -50,7 +50,8 @@ HOSPITALS = [
 USER_LOCATION = {
     "address": "45 Residential Complex, Sector 12, Ghaziabad",
     "lat": 28.6139,
-    "lng": 77.2090
+    "lng": 77.2090,
+    "phone": "+91-98765-43210"
 }
 
 # Initialize session state
@@ -68,27 +69,19 @@ if 'alert_sent' not in st.session_state:
     st.session_state.alert_sent = False
 
 def save_fall_snapshot(frame):
-    """Save fall detection snapshot as base64 in memory (NO FILE SAVING!)"""
+    """Save fall detection snapshot as base64 in memory"""
     try:
-        # Make sure frame is valid
         if frame is None or frame.size == 0:
-            print("❌ Invalid frame - cannot save")
             return None
         
-        # Convert frame to RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Encode as JPEG in memory
         success, buffer = cv2.imencode('.jpg', frame_rgb, [cv2.IMWRITE_JPEG_QUALITY, 95])
         
         if success:
-            # Convert to base64 string
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
             print(f"✅ Snapshot saved in memory ({len(jpg_as_text)} bytes)")
             return jpg_as_text
-        else:
-            print("❌ Failed to encode snapshot")
-            return None
+        return None
     except Exception as e:
         print(f"❌ Error saving snapshot: {e}")
         return None
@@ -100,7 +93,7 @@ def create_emergency_alert(fall_duration, snapshot_base64):
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "location": USER_LOCATION,
         "fall_duration": fall_duration,
-        "snapshot_data": snapshot_base64,  # Changed from snapshot_path
+        "snapshot_data": snapshot_base64,
         "status": "CRITICAL",
         "hospitals_notified": len(HOSPITALS)
     }
@@ -120,7 +113,7 @@ def detect_action(frame, model):
     return None, None, None, None, None, None, None
 
 def process_video(input_path, output_path, progress_bar, status_text):
-    """Process video with fall detection and emergency alerts"""
+    """Process video with fall detection"""
     try:
         status_text.text("Loading YOLO model...")
         model = YOLO("best.pt")
@@ -195,21 +188,15 @@ def process_video(input_path, output_path, progress_bar, status_text):
                         fall_frame_count += 1
                         elapsed_seconds = fall_frame_count / fps
                         
-                        # Trigger alert at 10 seconds
                         if elapsed_seconds >= 10 and not alert_triggered:
-                            # Use the CURRENT FULL FRAME
                             snapshot_frame = frame.copy()
-                            
-                            # Draw red box on it
                             cv2.rectangle(snapshot_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                             cv2.putText(snapshot_frame, "FALL DETECTED!", 
                                       (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 
                                       0.9, (0, 0, 255), 2)
                             
-                            # Save snapshot as base64
                             snapshot_data = save_fall_snapshot(snapshot_frame)
                             
-                            # Only create alert if snapshot saved successfully
                             if snapshot_data:
                                 st.session_state.fall_snapshot = snapshot_data
                                 create_emergency_alert(elapsed_seconds, snapshot_data)
@@ -220,9 +207,6 @@ def process_video(input_path, output_path, progress_bar, status_text):
                             cv2.putText(frame, "EMERGENCY ALERT SENT!",
                                         (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                         0.8, (0, 0, 255), 2)
-                            cv2.putText(frame, f"Hospitals notified - Fall: {int(elapsed_seconds)}s",
-                                        (50, 90), cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.6, (0, 0, 255), 2)
                         elif elapsed_seconds >= 10:
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                             cv2.putText(frame, f"ALERT ACTIVE - Fall: {int(elapsed_seconds)}s",
@@ -239,16 +223,13 @@ def process_video(input_path, output_path, progress_bar, status_text):
                     fall_frame_count = 0
                     alert_triggered = False
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label,
-                                (x1, y1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.6, (0, 255, 0), 2)
+                    cv2.putText(frame, label, (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
             out.write(frame)
         
         cap.release()
         out.release()
-        
         status_text.text("Processing completed successfully!")
         return True
         
@@ -256,40 +237,76 @@ def process_video(input_path, output_path, progress_bar, status_text):
         status_text.text(f"Error during processing: {str(e)}")
         return False
 
-def user_dashboard():
-    """User/Caregiver Dashboard"""
-    st.title("🎥 Fall Detection Emergency System - User Dashboard")
+def user_upload_view():
+    """View 1: User Upload Video"""
+    st.title("👤 User - Upload Video for Fall Detection")
     
-    # Alert status at top
-    if st.session_state.alert_sent and st.session_state.emergency_alerts:
-        latest_alert = st.session_state.emergency_alerts[0]
-        st.error(f"🚨 **EMERGENCY ALERT ACTIVE** - Sent to {latest_alert['hospitals_notified']} hospitals at {latest_alert['timestamp']}")
+    st.subheader("📤 Upload Video File")
+    video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
     
-    # Show download section if processing is complete
+    if video_file is not None:
+        st.write("✅ Video uploaded successfully!")
+        
+        # Video preview with fixed size
+        st.markdown("""
+            <style>
+            video {
+                width: 200px !important;
+                height: 200px !important;
+                object-fit: cover;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        st.video(video_file)
+        
+        if st.button("🚀 Process Video with Fall Detection"):
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
+                video_file.seek(0)
+                tmp_video.write(video_file.read())
+                video_path = tmp_video.name
+            
+            output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
+            output_path = os.path.join(tempfile.gettempdir(), output_filename)
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            with st.spinner('Processing video... Monitoring for falls...'):
+                success = process_video(video_path, output_path, progress_bar, status_text)
+            
+            if success:
+                st.session_state.processed_video_path = output_path
+                st.session_state.processed_video_name = output_filename
+                st.session_state.processing_complete = True
+                
+                progress_bar.progress(1.0)
+                status_text.success("🎉 Processing completed!")
+                
+                if st.session_state.alert_sent:
+                    st.balloons()
+                    st.error("🚨 EMERGENCY DETECTED! Check Family Dashboard to see alert details!")
+                
+                st.rerun()
+            
+            try:
+                os.unlink(video_path)
+            except:
+                pass
+    else:
+        st.info("📤 Please upload a video file to begin monitoring.")
+    
+    # Show processing results
     if st.session_state.processing_complete and st.session_state.processed_video_path:
         if os.path.exists(st.session_state.processed_video_path):
             st.success("✅ Video processing completed!")
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### 📥 Download Processed Video")
-                with open(st.session_state.processed_video_path, 'rb') as file:
-                    st.download_button(
-                        label="📥 Download Processed Video",
-                        data=file.read(),
-                        file_name=st.session_state.processed_video_name,
-                        mime="video/mp4"
-                    )
-            
-            with col2:
-                st.markdown("### 🚨 Emergency Status")
-                if st.session_state.alert_sent:
-                    st.error("**ALERT SENT TO HOSPITALS**")
-                    st.info(f"📍 Location: {USER_LOCATION['address']}")
-                    st.info(f"🏥 Hospitals Notified: {len(HOSPITALS)}")
-                else:
-                    st.success("No emergency detected")
+            with open(st.session_state.processed_video_path, 'rb') as file:
+                st.download_button(
+                    label="📥 Download Processed Video",
+                    data=file.read(),
+                    file_name=st.session_state.processed_video_name,
+                    mime="video/mp4"
+                )
             
             if st.button("🔄 Process Another Video"):
                 try:
@@ -301,172 +318,181 @@ def user_dashboard():
                 st.session_state.processed_video_name = None
                 st.session_state.alert_sent = False
                 st.rerun()
-    
-    # File upload section
-    if not st.session_state.processing_complete:
-        st.subheader("📤 Upload Video File")
-        video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
-        
-        if video_file is not None:
-            st.write("✅ Video uploaded successfully!")
-            
-            # Quick preview with fixed size - 200px width and height
-            st.markdown("""
-                <style>
-                video {
-                    width: 200px !important;
-                    height: 200px !important;
-                    object-fit: cover;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-            st.video(video_file)
-            
-            if st.button("🚀 Process Video with Fall Detection"):
-                # Save video to temp file for processing
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
-                    video_file.seek(0)  # Reset file pointer
-                    tmp_video.write(video_file.read())
-                    video_path = tmp_video.name
-                
-                output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
-                output_path = os.path.join(tempfile.gettempdir(), output_filename)
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                with st.spinner('Processing video... Monitoring for falls...'):
-                    success = process_video(video_path, output_path, progress_bar, status_text)
-                
-                if success:
-                    st.session_state.processed_video_path = output_path
-                    st.session_state.processed_video_name = output_filename
-                    st.session_state.processing_complete = True
-                    
-                    progress_bar.progress(1.0)
-                    status_text.success("🎉 Processing completed!")
-                    
-                    if st.session_state.alert_sent:
-                        st.balloons()
-                        st.warning("⚠️ EMERGENCY ALERT TRIGGERED! Check Hospital Dashboard.")
-                    
-                    st.rerun()
-                else:
-                    st.error("❌ Video processing failed.")
-            
-            try:
-                os.unlink(video_path)
-            except:
-                pass
-        else:
-            st.info("📤 Please upload a video file to begin monitoring.")
 
-def hospital_dashboard():
-    """Hospital Emergency Dashboard"""
-    st.title("🏥 Hospital Emergency Response Dashboard")
+def family_dashboard():
+    """View 2: Family Dashboard - See All Alerts & Hospitals Notified"""
+    st.title("👨‍👩‍👧 Family Dashboard - Emergency Monitoring")
     
-    # Stats row
+    if st.session_state.alert_sent and st.session_state.emergency_alerts:
+        latest_alert = st.session_state.emergency_alerts[0]
+        st.error(f"🚨 **EMERGENCY ALERT ACTIVE** - Alert sent at {latest_alert['timestamp']}")
+        
+        st.markdown("---")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📍 Patient Information")
+            st.write(f"**Location:** {USER_LOCATION['address']}")
+            st.write(f"**Contact:** {USER_LOCATION['phone']}")
+            st.write(f"**Fall Duration:** {latest_alert['fall_duration']:.1f} seconds")
+            st.write(f"**Alert Time:** {latest_alert['timestamp']}")
+            
+            # Show fall image
+            st.markdown("### 📸 Fall Detection Image")
+            snapshot_data = latest_alert.get('snapshot_data')
+            if snapshot_data:
+                try:
+                    img_bytes = base64.b64decode(snapshot_data)
+                    img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+                    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                    if img is not None:
+                        st.image(img, caption="Fall Detection Snapshot", use_column_width=True)
+                except:
+                    st.info("📸 Image loading...")
+        
+        with col2:
+            st.markdown("### 🏥 Hospitals Notified")
+            st.success(f"✅ Alert sent to {len(HOSPITALS)} nearby hospitals")
+            
+            for idx, hospital in enumerate(HOSPITALS, 1):
+                with st.container():
+                    st.markdown(f"**{idx}. {hospital['name']}**")
+                    st.write(f"📍 {hospital['address']}")
+                    st.write(f"📞 {hospital['phone']}")
+                    st.write(f"🚗 Distance: {hospital['distance']}")
+                    st.markdown("---")
+            
+            st.info("💡 Whichever hospital responds first will send help!")
+    
+    else:
+        st.success("✅ No emergency alerts. System monitoring...")
+        st.info("When a fall is detected for more than 10 seconds, an alert will be sent to nearby hospitals automatically.")
+    
+    if st.button("🔄 Refresh Dashboard"):
+        st.rerun()
+
+def hospital_view():
+    """View 3: Individual Hospital View - ONE Hospital Sees ONLY Patient Info"""
+    st.title("🏥 Hospital Emergency Response Center")
+    
+    # Hospital selector (simulating which hospital is logged in)
+    st.sidebar.markdown("### 🏥 Logged in as:")
+    selected_hospital = st.sidebar.selectbox(
+        "Select Hospital",
+        [h['name'] for h in HOSPITALS],
+        index=0
+    )
+    
+    hospital_info = next(h for h in HOSPITALS if h['name'] == selected_hospital)
+    st.sidebar.success(f"**{hospital_info['name']}**")
+    st.sidebar.write(f"📍 {hospital_info['address']}")
+    st.sidebar.write(f"📞 {hospital_info['phone']}")
+    
+    # Stats
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Active Alerts", len([a for a in st.session_state.emergency_alerts if a['status'] == 'CRITICAL']))
     with col2:
-        st.metric("Total Alerts Today", len(st.session_state.emergency_alerts))
+        st.metric("Today's Alerts", len(st.session_state.emergency_alerts))
     with col3:
-        st.metric("Response Time Avg", "2.3 min")
+        st.metric("Avg Response", "2.3 min")
     
     st.markdown("---")
     
-    # Emergency alerts
+    # Show alerts
     if st.session_state.emergency_alerts:
         st.subheader("🚨 Emergency Alerts")
         
         for alert in st.session_state.emergency_alerts:
             with st.expander(f"⚠️ ALERT #{alert['id']} - {alert['timestamp']} - {alert['status']}", expanded=True):
-                col1, col2 = st.columns([1, 1])
+                
+                col1, col2 = st.columns([2, 1])
                 
                 with col1:
-                    st.markdown("### 📍 Patient Location")
+                    st.markdown("### 📍 Patient Emergency Details")
                     st.write(f"**Address:** {alert['location']['address']}")
+                    st.write(f"**Contact:** {alert['location']['phone']}")
                     st.write(f"**Coordinates:** {alert['location']['lat']}, {alert['location']['lng']}")
                     st.write(f"**Fall Duration:** {alert['fall_duration']:.1f} seconds")
                     st.write(f"**Alert Time:** {alert['timestamp']}")
                     
-                    # Google Maps Link
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={alert['location']['lat']},{alert['location']['lng']}"
-                    st.markdown(f"[🗺️ **Open in Google Maps**]({maps_url})")
+                    # Calculate distance from this hospital
+                    st.write(f"**Distance from your hospital:** {hospital_info['distance']}")
                     
-                    # Fall snapshot - SHOW BASE64 IMAGE!
+                    # Google Maps navigation
+                    maps_url = f"https://www.google.com/maps/dir/?api=1&origin={hospital_info['lat']},{hospital_info['lng']}&destination={alert['location']['lat']},{alert['location']['lng']}"
+                    
+                    st.markdown(f"""
+                        <a href="{maps_url}" target="_blank">
+                            <button style="
+                                background-color: #FF4B4B;
+                                color: white;
+                                padding: 15px 32px;
+                                font-size: 18px;
+                                border: none;
+                                border-radius: 8px;
+                                cursor: pointer;
+                                margin: 10px 0;
+                            ">
+                                🚑 GET DIRECTIONS & DISPATCH AMBULANCE
+                            </button>
+                        </a>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
                     st.markdown("### 📸 Fall Detection Image")
                     snapshot_data = alert.get('snapshot_data')
                     
                     if snapshot_data:
                         try:
-                            # Decode base64 to image
                             img_bytes = base64.b64decode(snapshot_data)
                             img_array = np.frombuffer(img_bytes, dtype=np.uint8)
                             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
                             
                             if img is not None:
-                                # Already RGB from our save function!
-                                st.image(img, caption="Fall Detection Snapshot", use_column_width=True)
+                                st.image(img, caption="Fall Detected", use_column_width=True)
                             else:
-                                st.warning("⚠️ Could not decode image")
+                                st.warning("⚠️ Image loading...")
                         except Exception as e:
-                            st.error(f"❌ Error loading image: {str(e)}")
+                            st.error(f"❌ Error: {str(e)}")
                     else:
-                        st.info("📸 No snapshot available")
+                        st.info("📸 No image available")
                 
-                with col2:
-                    st.markdown("### 🏥 Nearby Hospitals")
-                    for hospital in HOSPITALS:
-                        with st.container():
-                            st.markdown(f"**{hospital['name']}**")
-                            st.write(f"📍 {hospital['address']}")
-                            st.write(f"📞 {hospital['phone']}")
-                            st.write(f"🚗 Distance: {hospital['distance']}")
-                            
-                            hospital_maps_url = f"https://www.google.com/maps/dir/?api=1&origin={alert['location']['lat']},{alert['location']['lng']}&destination={hospital['lat']},{hospital['lng']}"
-                            st.markdown(f"[🚑 **Get Directions**]({hospital_maps_url})")
-                            st.markdown("---")
+                st.markdown("---")
+                st.info("💡 **Note:** This alert was also sent to other nearby hospitals. Whichever hospital responds first should dispatch help.")
+    
     else:
-        st.info("✅ No active emergency alerts. System monitoring...")
+        st.success("✅ No active emergency alerts. System monitoring...")
     
-    # Refresh button
-    if st.button("🔄 Refresh Dashboard"):
+    if st.button("🔄 Refresh Alerts"):
         st.rerun()
-    
-    # DEBUG INFO
-    with st.expander("🔧 Debug - Check Snapshot Status"):
-        if st.session_state.emergency_alerts:
-            latest = st.session_state.emergency_alerts[0]
-            st.write(f"**Has Snapshot Data:** {bool(latest.get('snapshot_data'))}")
-            if latest.get('snapshot_data'):
-                st.write(f"**Data Length:** {len(latest.get('snapshot_data'))} characters")
-            st.write(f"**Alert Sent:** {st.session_state.alert_sent}")
-        else:
-            st.write("No alerts to debug")
 
 def main():
-    # Sidebar navigation
-    st.sidebar.title("🚨 Navigation")
-    page = st.sidebar.radio("Select View:", ["👤 User Dashboard", "🏥 Hospital Dashboard"])
+    # Sidebar navigation - 3 VIEWS
+    st.sidebar.title("🚨 Select View")
+    page = st.sidebar.radio(
+        "Choose Dashboard:",
+        ["👤 User - Upload Video", "👨‍👩‍👧 Family Dashboard", "🏥 Hospital Emergency Center"]
+    )
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📊 System Info")
+    st.sidebar.markdown("### 📊 System Status")
     st.sidebar.info(f"Active Alerts: {len(st.session_state.emergency_alerts)}")
-    st.sidebar.info(f"Hospitals Connected: {len(HOSPITALS)}")
+    st.sidebar.info(f"Hospitals: {len(HOSPITALS)}")
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📋 About")
-    st.sidebar.write("Fall Detection Emergency Response System")
-    st.sidebar.write("Automatic hospital notification on fall detection >10s")
+    st.sidebar.markdown("### ℹ️ About System")
+    st.sidebar.write("**Fall Detection Emergency Response**")
+    st.sidebar.write("Automatic hospital alerts when fall >10s detected")
     
-    # Route to correct dashboard
-    if page == "👤 User Dashboard":
-        user_dashboard()
+    # Route to correct view
+    if page == "👤 User - Upload Video":
+        user_upload_view()
+    elif page == "👨‍👩‍👧 Family Dashboard":
+        family_dashboard()
     else:
-        hospital_dashboard()
+        hospital_view()
 
 if __name__ == "__main__":
     main()
-
