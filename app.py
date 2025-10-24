@@ -68,19 +68,24 @@ if 'alert_sent' not in st.session_state:
 def save_fall_snapshot(frame):
     """Save fall detection snapshot to persistent location"""
     try:
-        # Create snapshots directory if it doesn't exist
-        snapshots_dir = os.path.join(tempfile.gettempdir(), 'fall_snapshots')
+        # Make sure frame is valid
+        if frame is None or frame.size == 0:
+            print("❌ Invalid frame - cannot save")
+            return None
+        
+        # Use CURRENT DIRECTORY instead of temp (more reliable!)
+        snapshots_dir = os.path.join(os.getcwd(), 'fall_snapshots')
         os.makedirs(snapshots_dir, exist_ok=True)
         
         # Create unique filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         snapshot_path = os.path.join(snapshots_dir, f"fall_{timestamp}.jpg")
         
         # Save with high quality
-        cv2.imwrite(snapshot_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        success = cv2.imwrite(snapshot_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         
         # Verify file was created
-        if os.path.exists(snapshot_path):
+        if success and os.path.exists(snapshot_path):
             file_size = os.path.getsize(snapshot_path)
             print(f"✅ Snapshot saved: {snapshot_path} ({file_size} bytes)")
             return snapshot_path
@@ -195,18 +200,27 @@ def process_video(input_path, output_path, progress_bar, status_text):
                         
                         # Trigger alert at 10 seconds
                         if elapsed_seconds >= 10 and not alert_triggered:
-                            # Draw detection box on frame before saving
+                            # Use the CURRENT FULL FRAME (not detected_frame!)
                             snapshot_frame = frame.copy()
+                            
+                            # Draw red box on it
                             cv2.rectangle(snapshot_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                             cv2.putText(snapshot_frame, "FALL DETECTED!", 
                                       (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 
                                       0.9, (0, 0, 255), 2)
                             
+                            # Save snapshot
                             snapshot_path = save_fall_snapshot(snapshot_frame)
-                            st.session_state.fall_snapshot = snapshot_path
-                            create_emergency_alert(elapsed_seconds, snapshot_path)
-                            alert_triggered = True
-                            st.session_state.alert_sent = True
+                            
+                            # Only create alert if snapshot saved successfully
+                            if snapshot_path:
+                                st.session_state.fall_snapshot = snapshot_path
+                                create_emergency_alert(elapsed_seconds, snapshot_path)
+                                alert_triggered = True
+                                st.session_state.alert_sent = True
+                            else:
+                                # If save failed, try again next frame
+                                pass
                             
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                             cv2.putText(frame, "EMERGENCY ALERT SENT!",
@@ -300,23 +314,18 @@ def user_dashboard():
         video_file = st.file_uploader("Choose video file", type=['mp4', 'avi', 'mov', 'mkv'])
         
         if video_file is not None:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
-                tmp_video.write(video_file.read())
-                video_path = tmp_video.name
-            
             st.write("✅ Video uploaded successfully!")
             
-            # Show video preview - ONE FRAME
-            try:
-                cap = cv2.VideoCapture(video_path)
-                ret, frame = cap.read()
-                if ret:
-                    st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), caption="Video Preview", use_container_width=True)
-                cap.release()
-            except:
-                pass
+            # Quick preview - just show the uploaded video player (INSTANT!)
+            st.video(video_file)
             
             if st.button("🚀 Process Video with Fall Detection"):
+                # Save video to temp file for processing
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_video:
+                    video_file.seek(0)  # Reset file pointer
+                    tmp_video.write(video_file.read())
+                    video_path = tmp_video.name
+                
                 output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
                 output_path = os.path.join(tempfile.gettempdir(), output_filename)
                 
@@ -383,24 +392,20 @@ def hospital_dashboard():
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={alert['location']['lat']},{alert['location']['lng']}"
                     st.markdown(f"[🗺️ **Open in Google Maps**]({maps_url})")
                     
-                    # Fall snapshot
+                    # Fall snapshot - SIMPLIFIED!
                     st.markdown("### 📸 Fall Detection Image")
-                    if alert.get('snapshot_path'):
-                        if os.path.exists(alert['snapshot_path']):
-                            try:
-                                # Read image with OpenCV and convert to RGB
-                                img = cv2.imread(alert['snapshot_path'])
-                                if img is not None:
-                                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                                    st.image(img_rgb, caption="Fall Detection Snapshot", use_container_width=True)
-                                else:
-                                    st.info("📸 Snapshot loading...")
-                            except:
-                                st.info("📸 Snapshot loading...")
+                    snapshot_path = alert.get('snapshot_path')
+                    
+                    if snapshot_path and os.path.exists(snapshot_path):
+                        # Just load and show - SIMPLE!
+                        img = cv2.imread(snapshot_path)
+                        if img is not None:
+                            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                            st.image(img_rgb, caption="Fall Detection Snapshot", use_container_width=True)
                         else:
-                            st.info("📸 Processing snapshot...")
+                            st.warning("⚠️ Could not load image file")
                     else:
-                        st.info("📸 No snapshot available")
+                        st.error(f"❌ Snapshot not found: {snapshot_path}")
                 
                 with col2:
                     st.markdown("### 🏥 Nearby Hospitals")
@@ -420,6 +425,28 @@ def hospital_dashboard():
     # Refresh button
     if st.button("🔄 Refresh Dashboard"):
         st.rerun()
+    
+    # DEBUG INFO - See what's happening!
+    with st.expander("🔧 Debug - Check Snapshot Status"):
+        if st.session_state.emergency_alerts:
+            latest = st.session_state.emergency_alerts[0]
+            st.write(f"**Snapshot Path:** {latest.get('snapshot_path')}")
+            st.write(f"**File Exists:** {os.path.exists(latest.get('snapshot_path', ''))}")
+            st.write(f"**Alert Sent:** {st.session_state.alert_sent}")
+            
+            # Try to load manually
+            if st.button("🔍 Try Load Image Manually"):
+                path = latest.get('snapshot_path')
+                if path and os.path.exists(path):
+                    try:
+                        img = cv2.imread(path)
+                        st.write(f"Image shape: {img.shape if img is not None else 'None'}")
+                        if img is not None:
+                            st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption="Manual Load Test")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        else:
+            st.write("No alerts to debug")
 
 def main():
     # Sidebar navigation
