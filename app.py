@@ -17,6 +17,40 @@ st.set_page_config(
     layout="wide"
 )
 
+# ============ GLOBAL CONSTANTS (Define at top) ============
+HOSPITALS = [
+    {
+        "name": "City General Hospital",
+        "address": "123 Medical Center Dr, Downtown",
+        "lat": 28.6139,
+        "lng": 77.2090,
+        "distance": "2.3 km",
+        "phone": "+91-11-2345-6789"
+    },
+    {
+        "name": "Emergency Care Center",
+        "address": "456 Healthcare Ave, Central District",
+        "lat": 28.6180,
+        "lng": 77.2150,
+        "distance": "3.1 km",
+        "phone": "+91-11-2345-6790"
+    },
+    {
+        "name": "Metro Medical Hospital",
+        "address": "789 Wellness Blvd, Medical District",
+        "lat": 28.6100,
+        "lng": 77.2050,
+        "distance": "4.2 km",
+        "phone": "+91-11-2345-6791"
+    }
+]
+
+USER_LOCATION = {
+    "address": "45 Residential Complex, Sector 12, Ghaziabad",
+    "lat": 28.6139,
+    "lng": 77.2090
+}
+
 # Initialize session state
 if 'processed_video_path' not in st.session_state:
     st.session_state.processed_video_path = None
@@ -30,9 +64,6 @@ if 'fall_snapshot' not in st.session_state:
     st.session_state.fall_snapshot = None
 if 'alert_sent' not in st.session_state:
     st.session_state.alert_sent = False
-
-# 🏥 HOSPITAL DATABASE - Change these to YOUR city's real hospitals!
-# TO CUSTOMIZE: Go to Google Maps, right-click any
 
 def save_fall_snapshot(frame):
     """Save fall detection snapshot to persistent location"""
@@ -158,7 +189,7 @@ def process_video(input_path, output_path, progress_bar, status_text):
                             st.session_state.alert_sent = True
                             
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                            cv2.putText(frame, "🚨 EMERGENCY ALERT SENT! 🚨",
+                            cv2.putText(frame, "EMERGENCY ALERT SENT!",
                                         (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                         0.8, (0, 0, 255), 2)
                             cv2.putText(frame, f"Hospitals notified - Fall: {int(elapsed_seconds)}s",
@@ -166,7 +197,7 @@ def process_video(input_path, output_path, progress_bar, status_text):
                                         0.6, (0, 0, 255), 2)
                         elif elapsed_seconds >= 10:
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                            cv2.putText(frame, f"🚨 ALERT ACTIVE - Fall: {int(elapsed_seconds)}s",
+                            cv2.putText(frame, f"ALERT ACTIVE - Fall: {int(elapsed_seconds)}s",
                                         (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                         0.8, (0, 0, 255), 2)
                         else:
