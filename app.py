@@ -408,7 +408,7 @@ def hospital_dashboard():
                             
                             if img is not None:
                                 # Already RGB from our save function!
-                                st.image(img, caption="Fall Detection Snapshot", use_container_width=True)
+                                st.image(img, caption="Fall Detection Snapshot", use_column_width=True)
                             else:
                                 st.warning("⚠️ Could not decode image")
                         except Exception as e:
@@ -469,3 +469,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
