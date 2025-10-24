@@ -67,16 +67,29 @@ if 'alert_sent' not in st.session_state:
 
 def save_fall_snapshot(frame):
     """Save fall detection snapshot to persistent location"""
-    # Create snapshots directory if it doesn't exist
-    snapshots_dir = os.path.join(tempfile.gettempdir(), 'fall_snapshots')
-    os.makedirs(snapshots_dir, exist_ok=True)
-    
-    # Create unique filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    snapshot_path = os.path.join(snapshots_dir, f"fall_{timestamp}.jpg")
-    
-    cv2.imwrite(snapshot_path, frame)
-    return snapshot_path
+    try:
+        # Create snapshots directory if it doesn't exist
+        snapshots_dir = os.path.join(tempfile.gettempdir(), 'fall_snapshots')
+        os.makedirs(snapshots_dir, exist_ok=True)
+        
+        # Create unique filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        snapshot_path = os.path.join(snapshots_dir, f"fall_{timestamp}.jpg")
+        
+        # Save with high quality
+        cv2.imwrite(snapshot_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        
+        # Verify file was created
+        if os.path.exists(snapshot_path):
+            file_size = os.path.getsize(snapshot_path)
+            print(f"✅ Snapshot saved: {snapshot_path} ({file_size} bytes)")
+            return snapshot_path
+        else:
+            print(f"❌ Failed to save snapshot: {snapshot_path}")
+            return None
+    except Exception as e:
+        print(f"❌ Error saving snapshot: {e}")
+        return None
 
 def create_emergency_alert(fall_duration, snapshot_path):
     """Create emergency alert when fall detected"""
@@ -182,7 +195,14 @@ def process_video(input_path, output_path, progress_bar, status_text):
                         
                         # Trigger alert at 10 seconds
                         if elapsed_seconds >= 10 and not alert_triggered:
-                            snapshot_path = save_fall_snapshot(detected_frame)
+                            # Draw detection box on frame before saving
+                            snapshot_frame = frame.copy()
+                            cv2.rectangle(snapshot_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                            cv2.putText(snapshot_frame, "FALL DETECTED!", 
+                                      (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 
+                                      0.9, (0, 0, 255), 2)
+                            
+                            snapshot_path = save_fall_snapshot(snapshot_frame)
                             st.session_state.fall_snapshot = snapshot_path
                             create_emergency_alert(elapsed_seconds, snapshot_path)
                             alert_triggered = True
@@ -260,6 +280,11 @@ def user_dashboard():
                     st.error("**ALERT SENT TO HOSPITALS**")
                     st.info(f"📍 Location: {USER_LOCATION['address']}")
                     st.info(f"🏥 Hospitals Notified: {len(HOSPITALS)}")
+                    
+                    # Show snapshot preview
+                    if st.session_state.fall_snapshot and os.path.exists(st.session_state.fall_snapshot):
+                        st.markdown("### 📸 Fall Detection Snapshot")
+                        st.image(st.session_state.fall_snapshot, caption="Fall Detected", use_container_width=True)
                 else:
                     st.success("No emergency detected")
             
@@ -318,6 +343,14 @@ def user_dashboard():
                 pass
         else:
             st.info("📤 Please upload a video file to begin monitoring.")
+    
+    # Debug section (remove after testing)
+    with st.expander("🔧 Debug Info"):
+        st.write(f"Alert sent: {st.session_state.alert_sent}")
+        st.write(f"Snapshot path: {st.session_state.fall_snapshot}")
+        if st.session_state.fall_snapshot:
+            st.write(f"File exists: {os.path.exists(st.session_state.fall_snapshot)}")
+        st.write(f"Total alerts: {len(st.session_state.emergency_alerts)}")
 
 def hospital_dashboard():
     """Hospital Emergency Dashboard"""
