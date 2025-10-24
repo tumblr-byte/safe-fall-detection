@@ -280,11 +280,6 @@ def user_dashboard():
                     st.error("**ALERT SENT TO HOSPITALS**")
                     st.info(f"📍 Location: {USER_LOCATION['address']}")
                     st.info(f"🏥 Hospitals Notified: {len(HOSPITALS)}")
-                    
-                    # Show snapshot preview
-                    if st.session_state.fall_snapshot and os.path.exists(st.session_state.fall_snapshot):
-                        st.markdown("### 📸 Fall Detection Snapshot")
-                        st.image(st.session_state.fall_snapshot, caption="Fall Detected", use_container_width=True)
                 else:
                     st.success("No emergency detected")
             
@@ -310,6 +305,16 @@ def user_dashboard():
                 video_path = tmp_video.name
             
             st.write("✅ Video uploaded successfully!")
+            
+            # Show video preview - ONE FRAME
+            try:
+                cap = cv2.VideoCapture(video_path)
+                ret, frame = cap.read()
+                if ret:
+                    st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), caption="Video Preview", use_container_width=True)
+                cap.release()
+            except:
+                pass
             
             if st.button("🚀 Process Video with Fall Detection"):
                 output_filename = f"processed_{video_file.name.rsplit('.', 1)[0]}.avi"
@@ -343,14 +348,6 @@ def user_dashboard():
                 pass
         else:
             st.info("📤 Please upload a video file to begin monitoring.")
-    
-    # Debug section (remove after testing)
-    with st.expander("🔧 Debug Info"):
-        st.write(f"Alert sent: {st.session_state.alert_sent}")
-        st.write(f"Snapshot path: {st.session_state.fall_snapshot}")
-        if st.session_state.fall_snapshot:
-            st.write(f"File exists: {os.path.exists(st.session_state.fall_snapshot)}")
-        st.write(f"Total alerts: {len(st.session_state.emergency_alerts)}")
 
 def hospital_dashboard():
     """Hospital Emergency Dashboard"""
@@ -388,13 +385,22 @@ def hospital_dashboard():
                     
                     # Fall snapshot
                     st.markdown("### 📸 Fall Detection Image")
-                    if alert['snapshot_path'] and os.path.exists(alert['snapshot_path']):
-                        try:
-                            st.image(alert['snapshot_path'], caption="Fall Detection Snapshot", use_container_width=True)
-                        except Exception as e:
-                            st.warning("⚠️ Snapshot image temporarily unavailable")
+                    if alert.get('snapshot_path'):
+                        if os.path.exists(alert['snapshot_path']):
+                            try:
+                                # Read image with OpenCV and convert to RGB
+                                img = cv2.imread(alert['snapshot_path'])
+                                if img is not None:
+                                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                                    st.image(img_rgb, caption="Fall Detection Snapshot", use_container_width=True)
+                                else:
+                                    st.info("📸 Snapshot loading...")
+                            except:
+                                st.info("📸 Snapshot loading...")
+                        else:
+                            st.info("📸 Processing snapshot...")
                     else:
-                        st.info("📸 Fall snapshot will appear here when fall is detected")
+                        st.info("📸 No snapshot available")
                 
                 with col2:
                     st.markdown("### 🏥 Nearby Hospitals")
