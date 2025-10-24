@@ -31,46 +31,21 @@ if 'fall_snapshot' not in st.session_state:
 if 'alert_sent' not in st.session_state:
     st.session_state.alert_sent = False
 
-# Fake hospital database with coordinates
-HOSPITALS = [
-    {
-        "name": "City General Hospital",
-        "address": "123 Medical Center Dr, Downtown",
-        "lat": 28.6139,
-        "lng": 77.2090,
-        "distance": "2.3 km",
-        "phone": "+91-11-2345-6789"
-    },
-    {
-        "name": "Emergency Care Center",
-        "address": "456 Healthcare Ave, Central District",
-        "lat": 28.6180,
-        "lng": 77.2150,
-        "distance": "3.1 km",
-        "phone": "+91-11-2345-6790"
-    },
-    {
-        "name": "Metro Medical Hospital",
-        "address": "789 Wellness Blvd, Medical District",
-        "lat": 28.6100,
-        "lng": 77.2050,
-        "distance": "4.2 km",
-        "phone": "+91-11-2345-6791"
-    }
-]
-
-# Fake user location (can be customized)
-USER_LOCATION = {
-    "address": "45 Residential Complex, Sector 12, Ghaziabad",
-    "lat": 28.6139,
-    "lng": 77.2090
-}
+# 🏥 HOSPITAL DATABASE - Change these to YOUR city's real hospitals!
+# TO CUSTOMIZE: Go to Google Maps, right-click any
 
 def save_fall_snapshot(frame):
-    """Save fall detection snapshot"""
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-    cv2.imwrite(temp_file.name, frame)
-    return temp_file.name
+    """Save fall detection snapshot to persistent location"""
+    # Create snapshots directory if it doesn't exist
+    snapshots_dir = os.path.join(tempfile.gettempdir(), 'fall_snapshots')
+    os.makedirs(snapshots_dir, exist_ok=True)
+    
+    # Create unique filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    snapshot_path = os.path.join(snapshots_dir, f"fall_{timestamp}.jpg")
+    
+    cv2.imwrite(snapshot_path, frame)
+    return snapshot_path
 
 def create_emergency_alert(fall_duration, snapshot_path):
     """Create emergency alert when fall detected"""
@@ -348,9 +323,14 @@ def hospital_dashboard():
                     st.markdown(f"[🗺️ **Open in Google Maps**]({maps_url})")
                     
                     # Fall snapshot
+                    st.markdown("### 📸 Fall Detection Image")
                     if alert['snapshot_path'] and os.path.exists(alert['snapshot_path']):
-                        st.markdown("### 📸 Fall Detection Image")
-                        st.image(alert['snapshot_path'], caption="Fall Detection Snapshot", use_container_width=True)
+                        try:
+                            st.image(alert['snapshot_path'], caption="Fall Detection Snapshot", use_container_width=True)
+                        except Exception as e:
+                            st.warning("⚠️ Snapshot image temporarily unavailable")
+                    else:
+                        st.info("📸 Fall snapshot will appear here when fall is detected")
                 
                 with col2:
                     st.markdown("### 🏥 Nearby Hospitals")
