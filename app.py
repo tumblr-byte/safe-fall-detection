@@ -9,6 +9,8 @@ from ultralytics import YOLO
 import time
 from datetime import datetime
 import json
+import base64
+import numpy as np
 
 # Page configuration
 st.set_page_config(
@@ -66,44 +68,39 @@ if 'alert_sent' not in st.session_state:
     st.session_state.alert_sent = False
 
 def save_fall_snapshot(frame):
-    """Save fall detection snapshot to persistent location"""
+    """Save fall detection snapshot as base64 in memory (NO FILE SAVING!)"""
     try:
         # Make sure frame is valid
         if frame is None or frame.size == 0:
             print("❌ Invalid frame - cannot save")
             return None
         
-        # Use CURRENT DIRECTORY instead of temp (more reliable!)
-        snapshots_dir = os.path.join(os.getcwd(), 'fall_snapshots')
-        os.makedirs(snapshots_dir, exist_ok=True)
+        # Convert frame to RGB
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Create unique filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        snapshot_path = os.path.join(snapshots_dir, f"fall_{timestamp}.jpg")
+        # Encode as JPEG in memory
+        success, buffer = cv2.imencode('.jpg', frame_rgb, [cv2.IMWRITE_JPEG_QUALITY, 95])
         
-        # Save with high quality
-        success = cv2.imwrite(snapshot_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        
-        # Verify file was created
-        if success and os.path.exists(snapshot_path):
-            file_size = os.path.getsize(snapshot_path)
-            print(f"✅ Snapshot saved: {snapshot_path} ({file_size} bytes)")
-            return snapshot_path
+        if success:
+            # Convert to base64 string
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+            print(f"✅ Snapshot saved in memory ({len(jpg_as_text)} bytes)")
+            return jpg_as_text
         else:
-            print(f"❌ Failed to save snapshot: {snapshot_path}")
+            print("❌ Failed to encode snapshot")
             return None
     except Exception as e:
         print(f"❌ Error saving snapshot: {e}")
         return None
 
-def create_emergency_alert(fall_duration, snapshot_path):
+def create_emergency_alert(fall_duration, snapshot_base64):
     """Create emergency alert when fall detected"""
     alert = {
         "id": len(st.session_state.emergency_alerts) + 1,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "location": USER_LOCATION,
         "fall_duration": fall_duration,
-        "snapshot_path": snapshot_path,
+        "snapshot_data": snapshot_base64,  # Changed from snapshot_path
         "status": "CRITICAL",
         "hospitals_notified": len(HOSPITALS)
     }
@@ -200,7 +197,7 @@ def process_video(input_path, output_path, progress_bar, status_text):
                         
                         # Trigger alert at 10 seconds
                         if elapsed_seconds >= 10 and not alert_triggered:
-                            # Use the CURRENT FULL FRAME (not detected_frame!)
+                            # Use the CURRENT FULL FRAME
                             snapshot_frame = frame.copy()
                             
                             # Draw red box on it
@@ -209,18 +206,15 @@ def process_video(input_path, output_path, progress_bar, status_text):
                                       (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 
                                       0.9, (0, 0, 255), 2)
                             
-                            # Save snapshot
-                            snapshot_path = save_fall_snapshot(snapshot_frame)
+                            # Save snapshot as base64
+                            snapshot_data = save_fall_snapshot(snapshot_frame)
                             
                             # Only create alert if snapshot saved successfully
-                            if snapshot_path:
-                                st.session_state.fall_snapshot = snapshot_path
-                                create_emergency_alert(elapsed_seconds, snapshot_path)
+                            if snapshot_data:
+                                st.session_state.fall_snapshot = snapshot_data
+                                create_emergency_alert(elapsed_seconds, snapshot_data)
                                 alert_triggered = True
                                 st.session_state.alert_sent = True
-                            else:
-                                # If save failed, try again next frame
-                                pass
                             
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                             cv2.putText(frame, "EMERGENCY ALERT SENT!",
@@ -316,7 +310,16 @@ def user_dashboard():
         if video_file is not None:
             st.write("✅ Video uploaded successfully!")
             
-            # Quick preview - just show the uploaded video player (INSTANT!)
+            # Quick preview with fixed size - 200px width and height
+            st.markdown("""
+                <style>
+                video {
+                    width: 200px !important;
+                    height: 200px !important;
+                    object-fit: cover;
+                }
+                </style>
+            """, unsafe_allow_html=True)
             st.video(video_file)
             
             if st.button("🚀 Process Video with Fall Detection"):
@@ -392,20 +395,26 @@ def hospital_dashboard():
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={alert['location']['lat']},{alert['location']['lng']}"
                     st.markdown(f"[🗺️ **Open in Google Maps**]({maps_url})")
                     
-                    # Fall snapshot - SIMPLIFIED!
+                    # Fall snapshot - SHOW BASE64 IMAGE!
                     st.markdown("### 📸 Fall Detection Image")
-                    snapshot_path = alert.get('snapshot_path')
+                    snapshot_data = alert.get('snapshot_data')
                     
-                    if snapshot_path and os.path.exists(snapshot_path):
-                        # Just load and show - SIMPLE!
-                        img = cv2.imread(snapshot_path)
-                        if img is not None:
-                            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                            st.image(img_rgb, caption="Fall Detection Snapshot", use_container_width=True)
-                        else:
-                            st.warning("⚠️ Could not load image file")
+                    if snapshot_data:
+                        try:
+                            # Decode base64 to image
+                            img_bytes = base64.b64decode(snapshot_data)
+                            img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+                            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                            
+                            if img is not None:
+                                # Already RGB from our save function!
+                                st.image(img, caption="Fall Detection Snapshot", use_container_width=True)
+                            else:
+                                st.warning("⚠️ Could not decode image")
+                        except Exception as e:
+                            st.error(f"❌ Error loading image: {str(e)}")
                     else:
-                        st.error(f"❌ Snapshot not found: {snapshot_path}")
+                        st.info("📸 No snapshot available")
                 
                 with col2:
                     st.markdown("### 🏥 Nearby Hospitals")
@@ -426,25 +435,14 @@ def hospital_dashboard():
     if st.button("🔄 Refresh Dashboard"):
         st.rerun()
     
-    # DEBUG INFO - See what's happening!
+    # DEBUG INFO
     with st.expander("🔧 Debug - Check Snapshot Status"):
         if st.session_state.emergency_alerts:
             latest = st.session_state.emergency_alerts[0]
-            st.write(f"**Snapshot Path:** {latest.get('snapshot_path')}")
-            st.write(f"**File Exists:** {os.path.exists(latest.get('snapshot_path', ''))}")
+            st.write(f"**Has Snapshot Data:** {bool(latest.get('snapshot_data'))}")
+            if latest.get('snapshot_data'):
+                st.write(f"**Data Length:** {len(latest.get('snapshot_data'))} characters")
             st.write(f"**Alert Sent:** {st.session_state.alert_sent}")
-            
-            # Try to load manually
-            if st.button("🔍 Try Load Image Manually"):
-                path = latest.get('snapshot_path')
-                if path and os.path.exists(path):
-                    try:
-                        img = cv2.imread(path)
-                        st.write(f"Image shape: {img.shape if img is not None else 'None'}")
-                        if img is not None:
-                            st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption="Manual Load Test")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
         else:
             st.write("No alerts to debug")
 
