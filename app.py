@@ -122,7 +122,6 @@ def process_video(input_path, output_path, progress_bar, status_text):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-
     process_width = min(640, width)
     process_height = int((process_width / width) * height)
     scale_x = width / process_width
@@ -130,7 +129,6 @@ def process_video(input_path, output_path, progress_bar, status_text):
 
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
 
     fall_start_time = None
     fall_frame_count = 0
@@ -155,7 +153,6 @@ def process_video(input_path, output_path, progress_bar, status_text):
             progress_bar.progress(progress)
             status_text.text(f"Processing frame {frame_count}/{total_frames}")
 
-       
         if frame_count % skip_frames == 0:
             small_frame = cv2.resize(frame, (process_width, process_height))
             cls_id, conf, x1, y1, x2, y2, _ = detect_action(small_frame, model)
@@ -168,7 +165,6 @@ def process_video(input_path, output_path, progress_bar, status_text):
                 detection_confidence *= 0.9
                 if detection_confidence < 0.5:
                     last_detection = None
-
 
         if last_detection and detection_confidence > 0.5:
             cls_id, conf, x1, y1, x2, y2, _ = last_detection
@@ -205,10 +201,21 @@ def process_video(input_path, output_path, progress_bar, status_text):
                         remaining = int(10 - elapsed_seconds)
                         cv2.putText(frame, f"Fall detected, alert in {remaining}s",
                                     (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    
+                    # Draw bbox - YELLOW for <10s, RED for >=10s
+                    if elapsed_seconds >= 10:
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)  # RED
+                        cv2.putText(frame, label, (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    else:
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)  # YELLOW
+                        cv2.putText(frame, label, (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             else:
                 fall_start_time = None
                 fall_frame_count = 0
                 alert_triggered = False
+                # GREEN bbox for Walking/Sitting
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(frame, label, (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
@@ -468,4 +475,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
